@@ -1,0 +1,35 @@
+{
+  "clusters": [
+    {
+      "cluster_id": "0101-000000-forgotten", "cluster_name": "alice-scratch", "state": "RUNNING",
+      "cluster_source": "UI", "creator_user_name": "alice@acme.com", "spark_version": "15.4.x-scala2.12",
+      "autotermination_minutes": 0, "start_time": 1792800000000, "custom_tags": {"team": "data"}
+    },
+    {
+      "cluster_id": "0101-000000-photondev", "cluster_name": "poc-photon", "state": "RUNNING",
+      "cluster_source": "UI", "creator_user_name": "intern@acme.com", "spark_version": "15.4.x-scala2.12",
+      "runtime_engine": "PHOTON", "autotermination_minutes": 60, "start_time": 1792990000000,
+      "custom_tags": {"env": "dev"}
+    },
+    {
+      "cluster_id": "0101-000000-oldphoton", "cluster_name": "legacy-photon", "state": "RESIZING",
+      "cluster_source": "API", "creator_user_name": "bob@acme.com",
+      "spark_version": "13.3.x-photon-scala2.12", "autotermination_minutes": 30,
+      "start_time": 1792900000000, "last_restarted_time": 1792990000000, "custom_tags": {"environment": "Sandbox"}
+    },
+    {
+      "cluster_id": "0101-000000-longrun", "cluster_name": "shared-analytics", "state": "RUNNING",
+      "cluster_source": "UI", "creator_user_name": "carol@acme.com", "spark_version": "15.4.x-scala2.12",
+      "autotermination_minutes": 60, "start_time": 1792900000000
+    },
+    {
+      "cluster_id": "0101-000000-jobcluster", "cluster_name": "job-123-run-456", "state": "RUNNING",
+      "cluster_source": "JOB", "spark_version": "15.4.x-scala2.12", "autotermination_minutes": 0,
+      "start_time": 1792800000000
+    },
+    {
+      "cluster_id": "0101-000000-stopped", "cluster_name": "stopped", "state": "TERMINATED",
+      "cluster_source": "UI", "autotermination_minutes": 0, "start_time": 1792800000000
+    }
+  ]
+}
