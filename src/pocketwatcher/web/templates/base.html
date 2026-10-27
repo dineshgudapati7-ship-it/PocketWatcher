@@ -7,9 +7,13 @@
   <link rel="preload" href="/static/fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
+  <script>
+    // Apply a saved theme before first paint so the page never flashes the wrong one.
+    try { const t = localStorage.getItem("pw-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
+  </script>
 </head>
 <body>
-{% from "_ui.html" import icon, notice %}
+{% from "_ui.html" import icon, notice, theme_switch %}
 {% if user %}
 {% set path = request.url.path %}
 <div class="app">
@@ -30,10 +34,13 @@
     </div>
     <div class="sidebar-foot">
       <span class="who" title="{{ user.email }}">{{ user.email }}</span>
-      <form class="inline" method="post" action="/logout">
-        <input type="hidden" name="csrf" value="{{ csrf }}">
-        <button class="btn btn-ghost btn-sm" type="submit" aria-label="Sign out">{{ icon("logout") }}Sign out</button>
-      </form>
+      <div class="row">
+        <form class="inline" method="post" action="/logout">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="btn btn-ghost btn-sm" type="submit" aria-label="Sign out">{{ icon("logout") }}Sign out</button>
+        </form>
+        {{ theme_switch() }}
+      </div>
     </div>
   </aside>
   <div class="main">
@@ -57,6 +64,29 @@
     btn.dataset.copied = ""; btn.textContent = "Copied";
     setTimeout(() => { delete btn.dataset.copied; btn.textContent = "Copy"; }, 1600);
   });
+</script>
+<script>
+  // Theme switch: "system" follows the OS; a choice is remembered in this browser only.
+  (() => {
+    const root = document.documentElement;
+    const read = () => { try { return localStorage.getItem("pw-theme") || "system"; } catch { return "system"; } };
+    const apply = (choice) => {
+      if (choice === "system") delete root.dataset.theme; else root.dataset.theme = choice;
+      try { choice === "system" ? localStorage.removeItem("pw-theme") : localStorage.setItem("pw-theme", choice); } catch {}
+      document.querySelectorAll("[data-theme-choice]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeChoice === choice)));
+    };
+    apply(read());
+    const order = ["system", "light", "dark"];
+    document.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-theme-choice]");
+      if (!b) return;
+      // In the compact (phone) switch only the current mode is visible, so a tap moves to the next one.
+      const compact = getComputedStyle(b.parentElement.querySelector('[aria-pressed="false"]') || b).display === "none";
+      const choice = compact && b.getAttribute("aria-pressed") === "true"
+        ? order[(order.indexOf(b.dataset.themeChoice) + 1) % order.length] : b.dataset.themeChoice;
+      apply(choice);
+    });
+  })();
 </script>
 {% block scripts %}{% endblock %}
 </body>

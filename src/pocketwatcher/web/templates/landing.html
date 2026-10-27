@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% from "_ui.html" import icon %}
+{% from "_ui.html" import icon, theme_switch %}
 {% block standalone %}
 <header class="landing-top">
   <a class="brand" href="/" style="padding: 0"><span class="brand-mark">{{ icon("pulse") }}</span><span>PocketWatcher</span></a>
-  <a class="btn" href="/login">Sign in</a>
+  <div class="actions" style="align-items: center">{{ theme_switch() }}<a class="btn" href="/login">Sign in</a></div>
 </header>
 <main>
   <section class="hero">

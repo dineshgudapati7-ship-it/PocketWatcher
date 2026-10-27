@@ -11,6 +11,9 @@
 {%- elif name == "alert" %}<circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 10.9v.1"/>
 {%- elif name == "download" %}<path d="M8 2.5v8M4.5 7.5 8 11l3.5-3.5"/><path d="M2.5 13.5h11"/>
 {%- elif name == "pulse" %}<path d="M1.5 8h3l2-4.5 3 9 2-4.5h3"/>
+{%- elif name == "system" %}<rect x="2" y="2.5" width="12" height="8.5" rx="1.5"/><path d="M5.5 13.5h5M8 11v2.5"/>
+{%- elif name == "sun" %}<circle cx="8" cy="8" r="2.8"/><path d="M8 1.5v1.3M8 13.2v1.3M1.5 8h1.3M13.2 8h1.3M3.4 3.4l.9.9M11.7 11.7l.9.9M3.4 12.6l.9-.9M11.7 4.3l.9-.9"/>
+{%- elif name == "moon" %}<path d="M13 9.6A5.5 5.5 0 1 1 6.4 3a4.4 4.4 0 0 0 6.6 6.6Z"/>
 {%- endif %}</svg>
 {%- endmacro %}
 
@@ -90,4 +93,12 @@
   </li>
 {% endfor %}
 </ul>
+{%- endmacro %}
+
+{% macro theme_switch() -%}
+<div class="theme-switch" role="group" aria-label="Theme">
+  <button type="button" data-theme-choice="system" aria-pressed="true" title="Use system setting">{{ icon("system") }}<span class="sr-only">System</span></button>
+  <button type="button" data-theme-choice="light" aria-pressed="false" title="Light">{{ icon("sun") }}<span class="sr-only">Light</span></button>
+  <button type="button" data-theme-choice="dark" aria-pressed="false" title="Dark">{{ icon("moon") }}<span class="sr-only">Dark</span></button>
+</div>
 {%- endmacro %}

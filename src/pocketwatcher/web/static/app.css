@@ -5,7 +5,7 @@
 @font-face { font-family: "Inter"; font-weight: 600; font-display: swap; src: url("fonts/inter-latin-600-normal.woff2") format("woff2"); }
 @font-face { font-family: "JetBrains Mono"; font-weight: 400; font-display: swap; src: url("fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); }
 
-:root {
+:root, :root[data-theme="light"] {
   color-scheme: light;
   --bg: #f7f7f8;
   --sidebar: #fbfbfc;
@@ -43,8 +43,10 @@
   font-feature-settings: "cv11", "ss01";
 }
 
+/* Dark tokens: used when the OS asks for dark and the viewer hasn't picked light,
+   or when the viewer picked dark explicitly (data-theme on <html>, set before paint). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
     --bg: #0c0c0e;
     --sidebar: #0f0f12;
@@ -71,6 +73,33 @@
     --series-4: #c98500; --series-5: #d55181;
     --grid: #222227; --axis: #33333a;
   }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0c0c0e;
+  --sidebar: #0f0f12;
+  --surface: #141417;
+  --surface-2: #18181c;
+  --hover: #1e1e23;
+  --border: #26262c;
+  --border-strong: #33333a;
+  --text: #ededf0;
+  --text-2: #b4b4bd;
+  --text-3: #8e8e99;
+  --accent: #5b51e0;
+  --accent-hover: #6a61e8;
+  --accent-soft: #23214a;
+  --accent-text: #a8a2ff;
+  --ok: #4cc777;      --ok-soft: #12291b;
+  --warn: #f0a640;    --warn-soft: #2e2312;
+  --crit: #f2706a;    --crit-soft: #331817;
+  --code: #0a0a0c;
+  --shadow-sm: none;
+  --shadow: 0 0 0 1px rgba(255, 255, 255, .02);
+  --ring: 0 0 0 3px rgba(122, 114, 240, .35);
+  --series-0: #71717a; --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+  --series-4: #c98500; --series-5: #d55181;
+  --grid: #222227; --axis: #33333a;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -143,7 +172,7 @@ svg.icon { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: no
     scrollbar-width: none;
     background: color-mix(in srgb, var(--sidebar) 86%, transparent); backdrop-filter: blur(14px) saturate(170%); }
   .brand { padding: 0 8px 0 0; }
-  .brand span { display: none; }
+  .brand > span:not(.brand-mark) { display: none; }
   .nav { grid-auto-flow: column; }
   .nav-section, .sidebar-foot .who { display: none; }
   .sidebar-foot { margin: 0 0 0 auto; border: 0; padding: 0; }
@@ -158,6 +187,10 @@ svg.icon { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: no
   .content { padding: 24px 16px 64px; }
   .grid-2, .grid-wide { grid-template-columns: minmax(0, 1fr); }
   .nav svg { display: none; }
+  /* One button showing the current mode; tapping cycles System -> Light -> Dark. */
+  .sidebar .theme-switch { padding: 0; background: transparent; border: 0; }
+  .sidebar .theme-switch button:not([aria-pressed="true"]) { display: none; }
+  .sidebar .theme-switch button[aria-pressed="true"] { box-shadow: none; background: transparent; }
 }
 
 /* --- surfaces ----------------------------------------------------------------------- */
@@ -429,7 +462,8 @@ details.as-table summary:hover { color: var(--text); }
 /* --- accessibility preferences ------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+  /* 0s, not a tiny duration: transition-property defaults to all, so any duration would animate every colour change. */
+  *, *::before, *::after { transition-duration: 0s !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
   .btn:active { transform: none; }
 }
 @media (prefers-reduced-transparency: reduce) {
@@ -441,3 +475,13 @@ details.as-table summary:hover { color: var(--text); }
 @media (forced-colors: active) {
   .cols .seg, .meter > span, .bars-list .track span, .swatch { forced-color-adjust: none; }
 }
+
+/* Theme switch: System / Light / Dark. */
+.theme-switch { display: inline-flex; padding: 2px; gap: 2px; border-radius: 8px; background: var(--hover); border: 1px solid var(--border); }
+.theme-switch button {
+  display: grid; place-items: center; width: 30px; height: 26px; border: 0; border-radius: 6px; cursor: pointer;
+  background: transparent; color: var(--text-3); transition: background-color .12s, color .12s;
+}
+.theme-switch button:hover { color: var(--text); }
+.theme-switch button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm), 0 0 0 1px var(--border); }
+.sidebar-foot .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
