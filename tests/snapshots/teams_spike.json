@@ -1,0 +1,47 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "actions": [
+    "Open in Databricks",
+    "Mute for 7 days"
+  ],
+  "body": [
+    {
+      "color": "Attention",
+      "size": "Medium",
+      "text": "Update: Spend spike: job 42 cost $960 on Oct 19",
+      "type": "TextBlock",
+      "weight": "Bolder",
+      "wrap": true
+    },
+    {
+      "text": "16.0x its 7-day median of $60.00. <script> & co",
+      "type": "TextBlock",
+      "wrap": true
+    },
+    {
+      "facts": [
+        {
+          "title": "Cost",
+          "value": "$960"
+        },
+        {
+          "title": "7-day median",
+          "value": "$60.00"
+        }
+      ],
+      "type": "FactSet"
+    },
+    {
+      "isSubtle": true,
+      "size": "Small",
+      "text": "acme-prod · Owner: etl@acme.com · Costs are estimated at list price",
+      "type": "TextBlock",
+      "wrap": true
+    }
+  ],
+  "msteams": {
+    "width": "Full"
+  },
+  "type": "AdaptiveCard",
+  "version": "1.4"
+}

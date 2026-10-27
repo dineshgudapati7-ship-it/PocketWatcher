@@ -1,0 +1,36 @@
+{
+  "blocks": [
+    {
+      "text": {
+        "emoji": true,
+        "text": "🔵 acme-prod: $7,800 spent Oct 13 to Oct 19 (+1200% vs prior week)",
+        "type": "plain_text"
+      },
+      "type": "header"
+    },
+    {
+      "text": {
+        "text": "Top 10 cost drivers this week.",
+        "type": "mrkdwn"
+      },
+      "type": "section"
+    },
+    {
+      "text": {
+        "text": "1. <https://adb-1.azuredatabricks.net/jobs/j12|job j12>: $1,200 (+$600 vs last week)\n2. <https://adb-1.azuredatabricks.net/jobs/j11|job j11>: $1,100 (new)\n3. <https://adb-1.azuredatabricks.net/jobs/j10|job j10>: $1,000 (new)\n4. <https://adb-1.azuredatabricks.net/jobs/j9|job j9>: $900 (new)\n5. <https://adb-1.azuredatabricks.net/jobs/j8|job j8>: $800 (new)\n6. <https://adb-1.azuredatabricks.net/jobs/j7|job j7>: $700 (new)\n7. <https://adb-1.azuredatabricks.net/jobs/j6|job j6>: $600 (new)\n8. <https://adb-1.azuredatabricks.net/jobs/j5|job j5>: $500 (new)\n9. <https://adb-1.azuredatabricks.net/jobs/j4|job j4>: $400 (new)\n10. <https://adb-1.azuredatabricks.net/jobs/j3|job j3>: $300 (new)",
+        "type": "mrkdwn"
+      },
+      "type": "section"
+    },
+    {
+      "elements": [
+        {
+          "text": "acme-prod · Costs are estimated at list price",
+          "type": "mrkdwn"
+        }
+      ],
+      "type": "context"
+    }
+  ],
+  "text": "acme-prod: $7,800 spent Oct 13 to Oct 19 (+1200% vs prior week)"
+}

@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<body style="margin:0;padding:24px;background:#f5f5f4;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917">
+  <table role="presentation" width="100%" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;border-top:4px solid {{ {'critical': '#dc2626', 'warning': '#ea580c'}.get(msg.severity, '#2563eb') }}">
+    <tr><td style="padding:24px">
+      <h1 style="margin:0 0 12px;font-size:18px;line-height:1.35">{{ msg.title }}</h1>
+      <p style="margin:0 0 16px;font-size:14px;line-height:1.5">{{ msg.summary }}</p>
+      {% if msg.facts %}
+      <table role="presentation" style="font-size:14px;border-collapse:collapse;margin-bottom:16px">
+        {% for k, v in msg.facts %}
+        <tr><td style="padding:4px 16px 4px 0;color:#57534e">{{ k }}</td><td style="padding:4px 0;font-weight:600">{{ v }}</td></tr>
+        {% endfor %}
+      </table>
+      {% endif %}
+      {% if msg.ranking %}
+      <ol style="font-size:14px;line-height:1.6;padding-left:20px;margin:0 0 16px">
+        {% for label, value, url in msg.ranking %}
+        <li>{% if url %}<a href="{{ url }}" style="color:#1d4ed8">{{ label }}</a>{% else %}{{ label }}{% endif %}: {{ value }}</li>
+        {% endfor %}
+      </ol>
+      {% endif %}
+      {% for link in msg.links %}
+      <a href="{{ link.url }}" style="display:inline-block;margin:0 8px 8px 0;padding:8px 14px;border-radius:6px;font-size:14px;text-decoration:none;{% if loop.first %}background:#1c1917;color:#ffffff{% else %}border:1px solid #d6d3d1;color:#1c1917{% endif %}">{{ link.label }}</a>
+      {% endfor %}
+      <p style="margin:16px 0 0;font-size:12px;color:#78716c">{{ msg.context }}</p>
+    </td></tr>
+  </table>
+</body>
+</html>

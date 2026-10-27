@@ -1,0 +1,12 @@
+{{ msg.title }}
+
+{{ msg.summary }}
+{% for k, v in msg.facts %}
+{{ k }}: {{ v }}{% endfor %}
+{% for label, value, url in msg.ranking %}
+{{ loop.index }}. {{ label }}: {{ value }}{% if url %} <{{ url }}>{% endif %}{% endfor %}
+{% for link in msg.links %}
+{{ link.label }}: {{ link.url }}{% endfor %}
+
+--
+{{ msg.context }}

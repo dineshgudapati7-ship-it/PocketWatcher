@@ -1,0 +1,42 @@
+{
+  "blocks": [
+    {
+      "text": {
+        "emoji": true,
+        "text": "🔴 Spend spike: job 42 cost $960 on Oct 19",
+        "type": "plain_text"
+      },
+      "type": "header"
+    },
+    {
+      "text": {
+        "text": "16.0x its 7-day median of $60.00. &lt;script&gt; &amp; co",
+        "type": "mrkdwn"
+      },
+      "type": "section"
+    },
+    {
+      "fields": [
+        {
+          "text": "*Cost*\n$960",
+          "type": "mrkdwn"
+        },
+        {
+          "text": "*7-day median*\n$60.00",
+          "type": "mrkdwn"
+        }
+      ],
+      "type": "section"
+    },
+    {
+      "elements": [
+        {
+          "text": "acme-prod · Owner: etl@acme.com · Costs are estimated at list price",
+          "type": "mrkdwn"
+        }
+      ],
+      "type": "context"
+    }
+  ],
+  "text": "Spend spike: job 42 cost $960 on Oct 19"
+}
