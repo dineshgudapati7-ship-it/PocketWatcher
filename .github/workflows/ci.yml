@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pocketwatcher
+          POSTGRES_PASSWORD: pocketwatcher
+          POSTGRES_DB: pocketwatcher_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - run: uv run ruff check src tests
+      - run: uv run ruff format --check src tests
+      - run: uv run mypy
+      - name: tests (SQLite)
+        run: uv run pytest -q
+      - name: tests (Postgres)
+        run: uv run pytest -q
+        env:
+          PW_TEST_DATABASE_URL: postgresql+psycopg://pocketwatcher:pocketwatcher@localhost:5432/pocketwatcher_test
+      - name: migrations apply cleanly on Postgres
+        run: uv run alembic upgrade head && uv run alembic downgrade base
+        env:
+          PW_DATABASE_URL: postgresql+psycopg://pocketwatcher:pocketwatcher@localhost:5432/pocketwatcher_test
