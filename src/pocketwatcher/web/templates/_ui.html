@@ -1,0 +1,93 @@
+{% macro icon(name) -%}
+<svg class="icon" viewBox="0 0 16 16" aria-hidden="true">
+{%- if name == "overview" %}<rect x="2" y="2" width="5" height="5" rx="1.2"/><rect x="9" y="2" width="5" height="5" rx="1.2"/><rect x="2" y="9" width="5" height="5" rx="1.2"/><rect x="9" y="9" width="5" height="5" rx="1.2"/>
+{%- elif name == "analytics" %}<path d="M2.5 13.5h11"/><path d="M4.5 11V7.5"/><path d="M8 11V4"/><path d="M11.5 11V6"/>
+{%- elif name == "channels" %}<path d="M4 7a4 4 0 1 1 8 0c0 3 1.5 4.5 1.5 4.5h-11S4 10 4 7Z"/><path d="M6.8 13.5a1.4 1.4 0 0 0 2.4 0"/>
+{%- elif name == "plus" %}<path d="M8 3.5v9M3.5 8h9"/>
+{%- elif name == "logout" %}<path d="M6 13.5H3.5a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1H6"/><path d="m10 11 3-3-3-3"/><path d="M13 8H6"/>
+{%- elif name == "back" %}<path d="M12.5 8h-9M7.5 4l-4 4 4 4"/>
+{%- elif name == "arrow" %}<path d="M3.5 8h9M8.5 4l4 4-4 4"/>
+{%- elif name == "check" %}<circle cx="8" cy="8" r="6"/><path d="m5.5 8.2 1.7 1.7 3.3-3.6"/>
+{%- elif name == "alert" %}<circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 10.9v.1"/>
+{%- elif name == "download" %}<path d="M8 2.5v8M4.5 7.5 8 11l3.5-3.5"/><path d="M2.5 13.5h11"/>
+{%- elif name == "pulse" %}<path d="M1.5 8h3l2-4.5 3 9 2-4.5h3"/>
+{%- endif %}</svg>
+{%- endmacro %}
+
+{% macro notice(flash) -%}
+<div class="notice{% if flash.error %} notice-error{% endif %}" role="{{ 'alert' if flash.error else 'status' }}">{{ icon("alert" if flash.error else "check") }}<span>{{ flash.text }}</span></div>
+{%- endmacro %}
+
+{% macro delta(change, up_is_bad=True) -%}
+{%- if change is none -%}<span class="delta delta-flat">New</span>
+{%- elif change > 0.005 -%}<span class="delta {{ 'delta-up' if up_is_bad else 'delta-down' }}">+{{ "%.0f" % (change * 100) }}%</span>
+{%- elif change < -0.005 -%}<span class="delta {{ 'delta-down' if up_is_bad else 'delta-up' }}">{{ "%.0f" % (change * 100) }}%</span>
+{%- else -%}<span class="delta delta-flat">0%</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro workspace_summary(ws, o, link=True) -%}
+{% set tag = "a" if link else "div" %}
+<{{ tag }} class="card summary"{% if link %} href="/workspaces/{{ ws.id }}"{% endif %}>
+  <div>
+    <span class="ws-name">{{ ws.name }}</span>
+    <span class="ws-host" title="{{ ws.host }}">{{ ws.cloud | title }} · {{ ws.host | replace("https://", "") }}</span>
+    <span class="s">{% if ws.billing_synced_at %}Synced {{ ws.billing_synced_at.strftime("%b %d, %H:%M") }} UTC{% else %}First sync within minutes{% endif %}</span>
+  </div>
+  <div>
+    <span class="k">Month to date</span>
+    <span class="v">{{ o.month_to_date | usd if o.has_data else "—" }}</span>
+    <span class="s">Through {{ o.through.strftime("%b %d") }}</span>
+  </div>
+  <div>
+    <span class="k">Forecast, {{ o.month_end.strftime("%b %d") }}</span>
+    <span class="v">{{ o.forecast | usd if o.has_data else "—" }}</span>
+    <span class="s">At the last 7 days' pace</span>
+  </div>
+  <div>
+    <span class="k">Monthly budget</span>
+    {% if o.budget %}<span class="v">{{ o.budget | usd }}</span>
+    <span class="s">{% if o.has_data and o.forecast > o.budget %}{{ (o.forecast - o.budget) | usd }} over at month end{% elif o.has_data %}{{ (o.budget - o.forecast) | usd }} headroom{% else %}Set{% endif %}</span>
+    {% else %}<span class="v unset">Not set</span><span class="s">Add one in settings</span>{% endif %}
+  </div>
+  <div>
+    <span class="k">Status</span>
+    <span class="badge badge-{{ o.status }}">{{ status_labels[o.status] }}</span>
+    {% if o.budget and o.has_data %}
+    {% set used = (o.month_to_date / o.budget * 100) %}
+    <div class="meter meter-{{ o.status }}" role="img" aria-label="{{ '%.0f' % used }}% of the monthly budget used"><span style="width: {{ [used, 100] | min }}%"></span></div>
+    <span class="s">{{ "%.0f" % used }}% of budget used</span>
+    {% endif %}
+  </div>
+</{{ tag }}>
+{%- endmacro %}
+
+{% macro alert_table(rows, names, show_workspace=True) -%}
+<div class="table-wrap">
+<table class="table">
+  <thead><tr><th>Alert</th>{% if show_workspace %}<th>Workspace</th>{% endif %}<th class="r">Impact</th><th>Delivery</th><th>Sent (UTC)</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><span class="strong"><span class="sev sev-{{ r.severity }}" aria-label="{{ r.severity }}"></span>{{ r.title }}</span>{% if r.lit %} <span class="badge badge-new badge-plain">New</span>{% endif %}</td>
+      {% if show_workspace %}<td>{{ names.get(r.workspace_id, "") }}</td>{% endif %}
+      <td class="r strong">{{ r.impact_usd | usd if r.impact_usd else "—" }}</td>
+      <td>{% if r.failed and not r.sent %}<span class="badge badge-failed" title="{{ r.error or '' }}">Failed</span>{% elif r.failed %}<span class="badge badge-warn" title="{{ r.error or '' }}">{{ r.sent }} sent, {{ r.failed }} failed</span>{% else %}<span class="badge badge-sent">Sent{% if r.sent > 1 %} to {{ r.sent }}{% endif %}</span>{% endif %}</td>
+      <td class="when">{{ r.created_at.strftime("%b %d, %H:%M") }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{%- endmacro %}
+
+{% macro check_list(checks) -%}
+<ul class="checks">
+{% for c in checks %}
+  <li>
+    <span class="badge badge-{{ c.status }}">{{ {"ok": "Passed", "warn": "Warning", "fail": "Failed"}[c.status] }}</span>
+    <div><span class="strong">{{ c.name }}</span><span class="sub muted">{{ c.detail }}</span>{% if c.fix and c.status != "ok" %}<span class="fix">{{ c.fix }}</span>{% endif %}</div>
+  </li>
+{% endfor %}
+</ul>
+{%- endmacro %}

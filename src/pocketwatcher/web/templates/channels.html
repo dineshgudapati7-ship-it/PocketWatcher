@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% from "_ui.html" import icon, notice %}
+{% block title %}Channels · PocketWatcher{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Alert channels</h1>
+    <p>Each alert goes to every matching channel once. Ongoing problems repeat daily until they are fixed or muted.</p>
+  </div>
+</div>
+
+{% set active = channels | selectattr("enabled") | list %}
+<section class="card">
+  <div class="card-header"><h2>Channels</h2><span class="muted">{{ active | length }} active</span></div>
+  {% if active %}
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Name</th><th>Type</th><th>Workspaces</th><th>Sends</th><th><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody>
+    {% for ch in active %}
+      <tr>
+        <td class="strong">{{ ch.name }}</td>
+        <td><span class="badge badge-plain">{{ {"slack": "Slack", "teams": "Teams", "email": "Email"}[ch.kind] }}</span></td>
+        <td>{{ names.get(ch.workspace_id, "?") if ch.workspace_id else "All workspaces" }}</td>
+        <td>{{ {"info": "Everything", "warning": "Warnings and critical", "critical": "Critical only"}[ch.min_severity] }}</td>
+        <td><div class="actions">
+          <form method="post" action="/channels/{{ ch.id }}/test">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-sm" type="submit">Send test</button>
+          </form>
+          <form method="post" action="/channels/{{ ch.id }}/delete">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-sm btn-danger" type="submit">Remove</button>
+          </form>
+        </div></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty"><h3>No channels yet</h3><p>Alerts are evaluated but not delivered until you add one below.</p></div>
+  {% endif %}
+</section>
+
+<section class="card" style="margin-top: 20px" id="add-channel">
+  <div class="card-header"><div><h2>Add a channel</h2><p>Webhook URLs and addresses are stored encrypted.</p></div></div>
+  <form method="post" action="/channels">
+    <div class="card-body">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      {% if flash and flash.near == "add-channel" %}{{ notice(flash) }}{% endif %}
+      <div class="fields">
+        <div class="field"><label for="kind">Type</label>
+          <select id="kind" name="kind">
+            <option value="slack">Slack incoming webhook</option>
+            <option value="teams">Microsoft Teams Workflows webhook</option>
+            <option value="email">Email</option>
+          </select></div>
+        <div class="field"><label for="name">Name</label><input id="name" name="name" placeholder="#data-costs" required></div>
+      </div>
+      <div class="fields">
+        <div class="field"><label for="target">Webhook URL or email addresses</label>
+          <input id="target" name="target" required autocomplete="off" spellcheck="false"
+                 placeholder="https://hooks.slack.com/services/…  or  finance@acme.com, lead@acme.com">
+          <span class="hint">Slack: hooks.slack.com/services/… · Teams: the URL from a "When a Teams webhook request is received" workflow · Email: comma-separated.</span></div>
+      </div>
+      <div class="fields">
+        <div class="field"><label for="min_severity">Send</label>
+          <select id="min_severity" name="min_severity">
+            <option value="warning">Warnings and critical</option>
+            <option value="critical">Critical only</option>
+            <option value="info">Everything</option>
+          </select>
+          <span class="hint">The weekly digest goes to every channel.</span></div>
+        <div class="field"><label for="workspace_id">Workspaces</label>
+          <select id="workspace_id" name="workspace_id">
+            <option value="">All workspaces</option>
+            {% for w in workspaces %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
+          </select></div>
+      </div>
+    </div>
+    <div class="card-foot"><button class="btn btn-primary" type="submit">Add channel</button></div>
+  </form>
+</section>
+{% endblock %}

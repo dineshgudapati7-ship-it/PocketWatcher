@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% from "_ui.html" import check_list, icon %}
+{% block title %}Connect a workspace · PocketWatcher{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Overview</a><span aria-hidden="true">/</span><span aria-current="page">Connect a workspace</span></nav>
+<div class="page-header">
+  <div>
+    <h1>Connect a workspace</h1>
+    <p>PocketWatcher only reads billing tables and cluster and warehouse settings. It never starts, changes or stops anything.</p>
+  </div>
+</div>
+
+{% if error %}<div class="notice notice-error" role="alert">{{ icon("alert") }}<span>{{ error }}</span></div>{% endif %}
+
+{% if preflight %}
+<section class="card" style="margin-bottom: 20px">
+  <div class="card-header"><div><h2>Connection check failed</h2><p>Fix the failing step, then submit again. Your secret was not saved.</p></div></div>
+  {{ check_list(preflight.checks) }}
+</section>
+{% endif %}
+
+<ol class="steps">
+  <li class="card step">
+    <div class="step-body">
+      <h2>Create a service principal</h2>
+      <p>In your workspace, open Settings, then Identity and access, then Service principals. Give it <strong>Workspace access</strong> and create an <strong>OAuth secret</strong>. Copy its Application ID and the secret.</p>
+      <form method="get" action="/workspaces/new" class="fields" style="align-items: end">
+        <div class="field">
+          <label for="app_id">Application ID</label>
+          <input id="app_id" name="app_id" value="{{ app_id }}" placeholder="8d3c1f2a-1b2c-4d5e-8f90-0123456789ab" autocomplete="off" spellcheck="false">
+        </div>
+        <div><button class="btn" type="submit">Show setup commands</button></div>
+      </form>
+    </div>
+  </li>
+
+  <li class="card step{% if not steps %} is-waiting{% endif %}">
+    <div class="step-body">
+      <h2>Grant read access to system tables</h2>
+      {% if steps %}
+      <p>A metastore admin runs this in the SQL editor.</p>
+      <div class="code"><button class="btn btn-sm copy" type="button" data-copy>Copy</button><pre>{{ steps.grants_sql }}</pre></div>
+      {% else %}
+      <p>Enter the Application ID above to get the exact GRANT statements for it.</p>
+      {% endif %}
+    </div>
+  </li>
+
+  <li class="card step{% if not steps %} is-waiting{% endif %}">
+    <div class="step-body">
+      <h2>Create a small SQL warehouse</h2>
+      <p>About $10 a month: queries run every 6 hours and take seconds. Create a 2X-Small serverless warehouse with auto-stop at 1 minute, then give the service principal <strong>Can use</strong> under Permissions.</p>
+      {% if steps %}
+      <div class="code"><span class="code-label">POST /api/2.0/sql/warehouses</span><button class="btn btn-sm copy" type="button" data-copy>Copy</button><pre>{{ steps.warehouse_json }}</pre></div>
+      <div class="code"><span class="code-label">PATCH /api/2.0/permissions/warehouses/&lt;warehouse-id&gt;</span><button class="btn btn-sm copy" type="button" data-copy>Copy</button><pre>{{ steps.warehouse_permission_json }}</pre></div>
+      {% endif %}
+    </div>
+  </li>
+
+  <li class="card step">
+    <div class="step-body">
+      <h2>Check and connect</h2>
+      <p>Every permission is checked before anything is saved.</p>
+      <form method="post" action="/workspaces">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="fields">
+          <div class="field"><label for="name">Name</label>
+            <input id="name" name="name" value="{{ form.name or '' }}" placeholder="acme-prod" required>
+            <span class="hint">Shown in alerts</span></div>
+          <div class="field span-2"><label for="host">Workspace URL</label>
+            <input id="host" name="host" value="{{ form.host or '' }}" placeholder="https://adb-1234567890123456.7.azuredatabricks.net" required spellcheck="false"></div>
+        </div>
+        <div class="fields">
+          <div class="field"><label for="client_id">Application ID</label>
+            <input id="client_id" name="client_id" value="{{ form.client_id or app_id }}" required autocomplete="off" spellcheck="false"></div>
+          <div class="field"><label for="client_secret">OAuth secret</label>
+            <input id="client_secret" name="client_secret" type="password" required autocomplete="off">
+            <span class="hint">Stored encrypted</span></div>
+          <div class="field"><label for="warehouse_id">Warehouse ID</label>
+            <input id="warehouse_id" name="warehouse_id" value="{{ form.warehouse_id or '' }}" required autocomplete="off" spellcheck="false">
+            <span class="hint">From the warehouse's Connection details</span></div>
+        </div>
+        <div style="margin-top: 18px"><button class="btn btn-primary" type="submit">Check and connect{{ icon("arrow") }}</button></div>
+      </form>
+    </div>
+  </li>
+</ol>
+{% endblock %}

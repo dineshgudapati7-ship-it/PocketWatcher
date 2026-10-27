@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "_ui.html" import workspace_summary, alert_table, check_list, icon, notice %}
+{% block title %}{{ ws.name }} · PocketWatcher{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/">Overview</a><span aria-hidden="true">/</span><span aria-current="page">{{ ws.name }}</span></nav>
+<div class="page-header">
+  <div>
+    <h1>{{ ws.name }}</h1>
+    <p><a href="{{ ws.host }}">{{ ws.host | replace("https://", "") }}</a></p>
+  </div>
+  <div class="actions"><a class="btn" href="/analytics?ws={{ ws.id }}">{{ icon("analytics") }}Analytics</a></div>
+</div>
+
+{{ workspace_summary(ws, outlook, link=False) }}
+
+{% if checks %}
+<section class="card" style="margin-top: 20px">
+  <div class="card-header"><h2>Connection checks</h2></div>
+  {{ check_list(checks) }}
+</section>
+{% endif %}
+
+<section class="card" style="margin-top: 20px" id="settings">
+  <div class="card-header"><div><h2>Alert settings</h2><p>Changes apply from the next check.</p></div></div>
+  <form method="post" action="/workspaces/{{ ws.id }}/settings">
+    <div class="card-body">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      {% if flash and flash.near == "settings" %}{{ notice(flash) }}{% endif %}
+      <div class="fields">
+        <div class="field"><label for="monthly_usd">Monthly budget (USD)</label>
+          <input id="monthly_usd" name="monthly_usd" inputmode="decimal" value="{{ cfg.budget.monthly_usd | plain if cfg.budget.monthly_usd else '' }}" placeholder="30000">
+          <span class="hint">Alerts on the month-end forecast and when exceeded. Leave blank to turn off.</span></div>
+        <div class="field"><label for="daily_usd">Daily budget (USD)</label>
+          <input id="daily_usd" name="daily_usd" inputmode="decimal" value="{{ cfg.budget.daily_usd | plain if cfg.budget.daily_usd else '' }}" placeholder="1200">
+          <span class="hint">Checked against each completed day.</span></div>
+        <div class="field"><label for="discount_percent">Discount off list price (%)</label>
+          <input id="discount_percent" name="discount_percent" inputmode="decimal" value="{{ '%g' % ((1 - ws.discount_multiplier) * 100) }}">
+          <span class="hint">From your Databricks contract, if any.</span></div>
+      </div>
+      <div class="fields">
+        <div class="field"><label for="required_tags">Required tags</label>
+          <input id="required_tags" name="required_tags" value="{{ cfg.untagged.required_tags | join(', ') }}" placeholder="team, cost_center">
+          <span class="hint">Alerts when more than 10% of a week's spend is missing one. Leave blank to turn off.</span></div>
+        <div class="field"><label for="dev_tag_values">Env tag values that mean dev</label>
+          <input id="dev_tag_values" name="dev_tag_values" value="{{ cfg.dev_premium.tag_values | join(', ') }}">
+          <span class="hint">Photon or serverless on these is flagged.</span></div>
+      </div>
+    </div>
+    <div class="card-foot"><button class="btn btn-primary" type="submit">Save settings</button><span class="muted">Costs cover DBUs only, not cloud VM charges.</span></div>
+  </form>
+</section>
+
+<section class="card" style="margin-top: 20px">
+  <div class="card-header"><h2>Alert history</h2></div>
+  {% if board %}{{ alert_table(board, {}, show_workspace=False) }}
+  {% else %}<div class="empty"><h3>No alerts yet</h3><p>Alerts for this workspace will appear here with their delivery status.</p></div>{% endif %}
+</section>
+{% endblock %}

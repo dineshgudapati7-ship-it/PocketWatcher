@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "_ui.html" import icon %}
+{% block standalone %}
+<header class="landing-top">
+  <a class="brand" href="/" style="padding: 0"><span class="brand-mark">{{ icon("pulse") }}</span><span>PocketWatcher</span></a>
+  <a class="btn" href="/login">Sign in</a>
+</header>
+<main>
+  <section class="hero">
+    <div>
+      <h1>Know where your Databricks spend is going, before the invoice does</h1>
+      <p class="lead">PocketWatcher reads your workspace's billing tables with a read-only service principal. It alerts your team in Slack, Teams or email when a budget is at risk or compute is left running, and gives finance a clear breakdown by team.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="/login">Sign in or create an account{{ icon("arrow") }}</a>
+      </div>
+    </div>
+    <div class="preview" aria-label="Example overview with sample data">
+      <div class="card" aria-hidden="true">
+        <div class="card-header"><div><h2>October, month to date</h2><p>acme-prod · estimated list price</p></div><span class="badge badge-at_risk">At risk</span></div>
+        <div class="kpis" style="grid-template-columns: repeat(3, minmax(0, 1fr))">
+          <div><div class="k">Spent</div><div class="v">$21,480</div><div class="s">Through Oct 26</div></div>
+          <div><div class="k">Forecast</div><div class="v">$32,900</div><div class="s">By Oct 31</div></div>
+          <div><div class="k">Budget</div><div class="v">$30,000</div><div class="s">$2,900 over</div></div>
+        </div>
+        <div class="table-wrap" style="border-top: 1px solid var(--border)">
+        <table class="table">
+          <thead><tr><th>Top cost by team</th><th class="r">Spend</th><th class="r">Share</th></tr></thead>
+          <tbody>
+            <tr><td class="strong">data-platform</td><td class="r">$11,940</td><td class="r muted">56%</td></tr>
+            <tr><td class="strong">analytics</td><td class="r">$5,310</td><td class="r muted">25%</td></tr>
+            <tr><td class="strong">ml</td><td class="r">$2,480</td><td class="r muted">12%</td></tr>
+            <tr><td class="muted">Untagged</td><td class="r">$1,750</td><td class="r muted">8%</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+      <span class="preview-note">Sample data</span>
+    </div>
+  </section>
+  <section class="features">
+    <div><h2>Read-only by design</h2><p>A service principal with SELECT on system tables. PocketWatcher never starts, changes or stops your compute.</p></div>
+    <div><h2>Set up in about 10 minutes</h2><p>Copy three blocks of setup and paste a webhook. Every permission is checked before anything is saved.</p></div>
+    <div><h2>Numbers finance can trust</h2><p>Spend by team, product and owner, with CSV export. Every figure is labelled as an estimate at list price with your discount applied.</p></div>
+  </section>
+</main>
+{% endblock %}

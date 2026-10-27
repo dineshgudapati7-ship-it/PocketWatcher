@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% from "_ui.html" import icon, delta %}
+{% block title %}Analytics · PocketWatcher{% endblock %}
+{% block content %}
+{% set r = report %}
+{% set q = "ws=" ~ selected_ws ~ "&tag=" ~ (r.tag_key or "") %}
+<div class="page-header">
+  <div>
+    <h1>Cost analytics</h1>
+    <p>Estimated list-price DBU cost{% if r.workspace_count > 1 %} across {{ r.workspace_count }} workspaces{% endif %}, after your discount. {{ r.period.label }}{% if r.comparable %}, compared with {{ r.previous.label }}{% endif %}.</p>
+  </div>
+  <div class="actions"><a class="btn" href="/analytics/export.csv?ws={{ selected_ws }}&range={{ range_key }}">{{ icon("download") }}Export CSV</a></div>
+</div>
+
+<form class="filters" method="get" action="/analytics" id="filters">
+  <input type="hidden" name="range" value="{{ range_key }}">
+  <nav class="segmented" aria-label="Date range">
+    {% for key, label in ranges.items() %}<a href="/analytics?range={{ key }}&{{ q }}"{% if key == range_key %} aria-current="true"{% endif %}>{{ label }}</a>{% endfor %}
+  </nav>
+  <div class="grow"></div>
+  <div class="field"><label for="ws">Workspace</label>
+    <select id="ws" name="ws" data-autosubmit>
+      <option value="">All workspaces</option>
+      {% for w in workspaces %}<option value="{{ w.id }}"{% if selected_ws == w.id | string %} selected{% endif %}>{{ w.name }}</option>{% endfor %}
+    </select></div>
+  <div class="field"><label for="tag">Group teams by tag</label>
+    <select id="tag" name="tag" data-autosubmit{% if not r.tag_keys %} disabled{% endif %}>
+      {% for k in r.tag_keys %}<option value="{{ k }}"{% if k == r.tag_key %} selected{% endif %}>{{ k }}</option>{% else %}<option>No tags found</option>{% endfor %}
+    </select></div>
+  <noscript><button class="btn" type="submit">Apply</button></noscript>
+</form>
+
+{% if not workspaces %}
+<div class="card"><div class="empty"><h3>No data yet</h3><p>Connect a workspace and its billing history will appear here after the first sync.</p><a class="btn btn-primary" href="/workspaces/new">{{ icon("plus") }}Connect a workspace</a></div></div>
+{% else %}
+
+<section class="card kpis" aria-label="Summary">
+  <div>
+    <div class="k">Total spend</div>
+    <div class="v">{{ r.total | usd }}</div>
+    <div class="s">{% if r.comparable %}{{ delta(r.change) }} vs previous period ({{ r.prev_total | usd }}){% else %}No full previous period to compare{% endif %}</div>
+  </div>
+  <div>
+    <div class="k">Average per day</div>
+    <div class="v">{{ r.per_day | usd }}</div>
+    <div class="s">Over {{ r.period.days }} days</div>
+  </div>
+  <div>
+    <div class="k">Forecast, {{ r.burn.month_end.strftime("%b %d") if r.burn else "month end" }}</div>
+    <div class="v">{{ r.burn.forecast | usd if r.burn else "—" }}</div>
+    <div class="s">{% if r.burn and r.burn.budget %}{% if r.burn.forecast > r.burn.budget %}<span class="delta delta-up">{{ (r.burn.forecast - r.burn.budget) | usd }} over</span>{% else %}<span class="delta delta-down">{{ (r.burn.budget - r.burn.forecast) | usd }} under</span>{% endif %} a {{ r.burn.budget | usd }} budget{% elif r.burn %}No monthly budget set{% else %}No usage this month yet{% endif %}</div>
+  </div>
+  <div>
+    <div class="k">Untagged spend</div>
+    <div class="v">{{ "%.0f%%" % (r.untagged_share * 100) if r.untagged_share is not none else "—" }}</div>
+    <div class="s">{% if r.tag_key %}Missing a <code>{{ r.tag_key }}</code> tag{% else %}No tags on any usage{% endif %}</div>
+  </div>
+</section>
+
+<section class="card" style="margin-top: 20px" aria-labelledby="trend-title">
+  <div class="card-header">
+    <div><h2 id="trend-title">Spend over time</h2><p>By {{ r.bucket_unit }}, stacked by product</p></div>
+    <div class="legend">{% for key, label, slot in columns.legend %}<span><i class="swatch slot-{{ slot }}"></i>{{ label }}</span>{% endfor %}</div>
+  </div>
+  <div class="card-body">
+    {% if r.total %}
+    <div class="cols" role="img" aria-label="Spend by {{ r.bucket_unit }}; values in the table below">
+      <div class="grid">{% for pct, label in columns.ticks %}<div style="bottom: {{ pct }}%"><span>{{ label }}</span></div>{% endfor %}</div>
+      <div class="bars">
+        {% for c in columns.columns %}
+        <div class="col" tabindex="0" data-tip='{{ c.tooltip }}' aria-label="{{ c.label }}: {{ c.total | usd }}">
+          {% for s in c.segments %}<div class="seg slot-{{ s.slot }}" style="height: calc({{ s.pct }}% - 2px)"></div>{% endfor %}
+          {% if c.show_label %}<span class="xl">{{ c.label }}</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="chart-foot"></div>
+    {% else %}<div class="empty"><h3>No spend in this period</h3><p>{{ r.notes | join(" ") }}</p></div>{% endif %}
+  </div>
+  <details class="as-table"><summary>View as table</summary>
+    <div class="table-wrap"><table class="table"><thead><tr><th>{{ r.bucket_unit | title }}</th>{% for key, label, slot in columns.legend %}<th class="r">{{ label }}</th>{% endfor %}<th class="r">Total</th></tr></thead>
+    <tbody>{% for b in r.buckets %}<tr><td>{{ b.label }}</td>{% for key, label, slot in columns.legend %}<td class="r">{{ b.by_group.get(key, 0) | usd }}</td>{% endfor %}<td class="r strong">{{ b.total | usd }}</td></tr>{% endfor %}</tbody></table></div>
+  </details>
+</section>
+
+<div class="grid-2" style="margin-top: 20px">
+  <section class="card" aria-labelledby="burn-title">
+    <div class="card-header">
+      <div><h2 id="burn-title">This month against budget</h2><p>{{ burn.burn.month_start.strftime("%B") if burn else "Month to date" }}, cumulative{% if r.burn and r.burn.budget_note %} · {{ r.burn.budget_note }}{% endif %}</p></div>
+      {% if burn %}<div class="legend"><span><i class="key-line slot-1"></i>Actual</span><span><i class="key-line slot-1" style="opacity: .55"></i>Forecast</span>{% if burn.budget_y is not none %}<span><i class="key-line" style="background: var(--crit)"></i>Budget</span>{% endif %}</div>{% endif %}
+    </div>
+    <div class="card-body">
+    {% if burn %}
+      <div class="burn" data-points='{{ burn.points }}'>
+        <div class="grid">{% for y, label in burn.ticks %}<div style="top: {{ y }}%"><span>{{ label }}</span></div>{% endfor %}</div>
+        <svg viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">
+          <path class="area" d="{{ burn.area_path }}"/>
+          <path class="forecast" d="{{ burn.forecast_path }}"/>
+          <path class="actual" d="{{ burn.actual_path }}"/>
+        </svg>
+        {% if burn.budget_y is not none %}<div class="budget" style="top: {{ burn.budget_y }}%"><span>Budget {{ burn.burn.budget | compact }}</span></div>{% endif %}
+        <div class="dot" style="left: {{ burn.end_x }}%; top: {{ burn.end_y }}%"></div>
+        <div class="dot hollow" style="left: {{ burn.forecast_x }}%; top: {{ burn.forecast_y }}%"></div>
+        <span class="tag" style="left: {{ burn.forecast_x }}%; top: {{ burn.forecast_y }}%">{{ burn.burn.forecast | compact }} forecast</span>
+        {% for x, label in burn.x_labels %}<span class="xl" style="left: {{ x }}%">{{ label }}</span>{% endfor %}
+        <div class="hair"></div>
+        <div class="hit" tabindex="0" aria-label="Cumulative spend {{ burn.burn.cumulative[-1][1] | usd }} through {{ burn.burn.through.strftime('%b %d') }}, forecast {{ burn.burn.forecast | usd }}"></div>
+      </div>
+    {% else %}<div class="empty"><h3>No usage this month yet</h3><p>The chart starts after the first completed day of the month.</p></div>{% endif %}
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="drivers-title">
+    <div class="card-header"><div><h2 id="drivers-title">What changed</h2><p>Largest increases vs the previous period</p></div></div>
+    {% if r.drivers %}
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Resource</th><th class="r">Now</th><th class="r">Before</th><th class="r">Change</th></tr></thead>
+      <tbody>{% for s in r.drivers %}<tr>
+        <td><span class="strong">{{ s.label }}</span><span class="sub">{{ names.get(s.workspace_id, "") }}{% if s.owner %} · {{ s.owner }}{% endif %}</span></td>
+        <td class="r strong">{{ s.cost | usd }}</td><td class="r muted">{{ s.prev | usd }}</td>
+        <td class="r"><span class="delta delta-up">+{{ (s.cost - s.prev) | usd }}</span></td>
+      </tr>{% endfor %}</tbody>
+    </table></div>
+    {% elif not r.comparable %}<div class="empty"><h3>Not enough history yet</h3><p>{{ r.notes[-1] }} Pick a shorter range to see what changed.</p></div>
+    {% else %}<div class="empty"><h3>Nothing grew</h3><p>No resource spent more than in the previous period.</p></div>{% endif %}
+  </section>
+</div>
+
+<div class="grid-2" style="margin-top: 20px">
+  <section class="card" aria-labelledby="tags-title">
+    <div class="card-header"><div><h2 id="tags-title">Spend by {{ r.tag_key or "team" }}</h2><p>For chargeback; untagged spend is listed last</p></div></div>
+    {% if r.tags %}
+    <ul class="bars-list">{% for s in r.tags %}
+      <li class="{{ 'untagged' if s.key in ('Untagged', '__other__') }}">
+        <span class="name">{{ s.label }}</span><span class="val">{{ s.cost | usd }}</span><span class="pct">{{ "%.0f%%" % (s.share * 100) }}</span>
+        <div class="track"><span style="width: {{ s.share * 100 }}%"></span></div>
+      </li>{% endfor %}</ul>
+    {% else %}<div class="empty"><h3>No tags found</h3><p>Add a tag such as <code>team</code> or <code>cost_center</code> to clusters, jobs and warehouses to split spend by team.</p></div>{% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="products-title">
+    <div class="card-header"><div><h2 id="products-title">Spend by product</h2><p>{{ "Change vs the previous period" if r.comparable else "Share of the period" }}</p></div></div>
+    <ul class="bars-list">{% for s in r.products %}
+      <li>
+        <span class="name"><i class="swatch slot-{{ group_slot[s.key] }}"></i>{{ s.label }}</span><span class="val">{{ s.cost | usd }}</span><span class="pct">{% if r.comparable %}{{ delta(s.change) }}{% else %}{{ "%.0f%%" % (s.share * 100) }}{% endif %}</span>
+        <div class="track"><span class="slot-{{ group_slot[s.key] }}" style="width: {{ s.share * 100 }}%"></span></div>
+      </li>{% endfor %}</ul>
+    <div class="card-header" style="border-top: 1px solid var(--border); border-bottom: 0"><div><h3>Compute type</h3><p>Serverless and Photon are billed at a premium</p></div></div>
+    <ul class="bars-list">{% for s in r.compute %}
+      <li><span class="name">{{ s.label }}</span><span class="val">{{ s.cost | usd }}</span><span class="pct">{{ "%.0f%%" % (s.share * 100) }}</span>
+        <div class="track"><span style="width: {{ s.share * 100 }}%"></span></div></li>{% endfor %}</ul>
+  </section>
+</div>
+
+<div class="grid-2 grid-wide" style="margin-top: 20px">
+  <section class="card" aria-labelledby="top-title">
+    <div class="card-header"><div><h2 id="top-title">Top spenders</h2><p>Jobs, clusters, warehouses and pipelines</p></div></div>
+    {% if r.spenders %}
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Resource</th><th>Product</th><th class="r">Spend</th><th class="r">Change</th></tr></thead>
+      <tbody>{% for s in r.spenders %}<tr>
+        <td><span class="strong">{{ s.label }}</span><span class="sub">{{ names.get(s.workspace_id, "") }}{% if s.owner %} · {{ s.owner }}{% endif %}</span></td>
+        <td><span class="legend"><span><i class="swatch slot-{{ group_slot[s.product] }}"></i>{{ dict(product_labels)[s.product] }}</span></span></td>
+        <td class="r strong">{{ s.cost | usd }}</td><td class="r">{% if r.comparable %}{{ delta(s.change) }}{% else %}<span class="delta delta-flat">—</span>{% endif %}</td>
+      </tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}<div class="empty"><h3>No spend in this period</h3></div>{% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="owners-title">
+    <div class="card-header"><div><h2 id="owners-title">Top owners</h2><p>By the identity the usage ran as</p></div></div>
+    {% if r.owners %}
+    <ul class="bars-list">{% for s in r.owners %}
+      <li><span class="name" title="{{ s.label }}">{{ s.label }}</span><span class="val">{{ s.cost | usd }}</span><span class="pct">{{ "%.0f%%" % (s.share * 100) }}</span>
+        <div class="track"><span style="width: {{ s.share * 100 }}%"></span></div></li>{% endfor %}</ul>
+    {% else %}<div class="empty"><h3>No owners recorded</h3></div>{% endif %}
+  </section>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Filters re-run the page on change; without JS the Apply button does the same.
+  document.querySelectorAll("[data-autosubmit]").forEach((el) => el.addEventListener("change", () => el.form.submit()));
+
+  // One tooltip for every chart. Labels go in with textContent: they come from customer data.
+  const tip = document.getElementById("viz-tip");
+  function showTip(x, y, title, rows) {
+    tip.replaceChildren();
+    const t = document.createElement("div"); t.className = "t"; t.textContent = title; tip.append(t);
+    for (const r of rows) {
+      const row = document.createElement("div"); row.className = "row";
+      const name = document.createElement("span");
+      if (r.slot !== undefined) { const k = document.createElement("i"); k.className = "key-line slot-" + r.slot; name.append(k); }
+      name.append(document.createTextNode(r.label));
+      const val = document.createElement("b"); val.textContent = r.value;
+      row.append(name, val); tip.append(row);
+    }
+    tip.style.display = "block";
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = Math.min(x + 14, innerWidth - w - 8) + "px";
+    tip.style.top = Math.max(8, y - h - 12) + "px";
+  }
+  const hideTip = () => { tip.style.display = "none"; };
+
+  document.querySelectorAll(".cols .col").forEach((col) => {
+    const data = JSON.parse(col.dataset.tip);
+    const rows = [{ label: "Total", value: data.total }, ...data.rows];
+    const show = (x, y) => showTip(x, y, data.title, rows);
+    col.addEventListener("pointermove", (e) => show(e.clientX, e.clientY));
+    col.addEventListener("focus", () => { const b = col.getBoundingClientRect(); show(b.right, b.top + 20); });
+    col.addEventListener("pointerleave", hideTip); col.addEventListener("blur", hideTip);
+  });
+
+  document.querySelectorAll(".burn").forEach((burn) => {
+    const pts = JSON.parse(burn.dataset.points), hit = burn.querySelector(".hit"), hair = burn.querySelector(".hair");
+    const at = (clientX) => {
+      const b = hit.getBoundingClientRect(), pct = (clientX - b.left) / b.width * 100;
+      return pts.reduce((best, p) => Math.abs(p.x - pct) < Math.abs(best.x - pct) ? p : best, pts[0]);
+    };
+    const show = (p, y) => {
+      hair.style.left = p.x + "%"; hair.style.display = "block";
+      const b = hit.getBoundingClientRect();
+      showTip(b.left + b.width * p.x / 100, y, p.label, [{ label: "Spent so far", value: p.value, slot: 1 }]);
+    };
+    hit.addEventListener("pointermove", (e) => show(at(e.clientX), e.clientY));
+    hit.addEventListener("pointerleave", () => { hair.style.display = "none"; hideTip(); });
+    hit.addEventListener("focus", () => show(pts[pts.length - 1], hit.getBoundingClientRect().top + 40));
+    hit.addEventListener("blur", () => { hair.style.display = "none"; hideTip(); });
+  });
+</script>
+{% endblock %}

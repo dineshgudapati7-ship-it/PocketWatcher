@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_ui.html" import workspace_summary, alert_table, icon %}
+{% block title %}Overview · PocketWatcher{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Overview</h1>
+    <p>Billing is checked every 6 hours and running compute every 15 minutes. Costs are estimated at Databricks list price.</p>
+  </div>
+  {% if passes %}<div class="actions"><a class="btn" href="/analytics">{{ icon("analytics") }}View analytics</a><a class="btn btn-primary" href="/workspaces/new">{{ icon("plus") }}Connect workspace</a></div>{% endif %}
+</div>
+
+{% if passes and not has_channels %}
+<div class="notice notice-warn" role="status">{{ icon("alert") }}<span>No alert channels yet, so nothing will be sent. <a href="/channels">Add Slack, Teams or email</a></span></div>
+{% endif %}
+
+{% for ws, o in passes %}
+  {{ workspace_summary(ws, o) }}
+{% else %}
+<div class="card">
+  <div class="empty">
+    <h3>Connect your first workspace</h3>
+    <p>Create a read-only service principal, grant it access to the billing system tables, and PocketWatcher starts watching. It takes about 10 minutes and nothing is saved until every check passes.</p>
+    <a class="btn btn-primary" href="/workspaces/new">{{ icon("plus") }}Connect a workspace</a>
+  </div>
+</div>
+{% endfor %}
+
+<section class="card" style="margin-top: 24px" aria-labelledby="alerts-title">
+  <div class="card-header">
+    <div><h2 id="alerts-title">Recent alerts</h2><p>Ranked by cost impact{% set new = board | selectattr("lit") | list %}{% if new %} · {{ new | length }} new since your last visit{% endif %}</p></div>
+  </div>
+  {% if board %}
+  {{ alert_table(board, names) }}
+  {% else %}
+  <div class="empty"><h3>No alerts</h3><p>PocketWatcher posts only when spend crosses a budget, spikes against its own baseline, or compute is left running.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}PocketWatcher{% endblock %}</title>
+  <link rel="preload" href="/static/fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+{% from "_ui.html" import icon, notice %}
+{% if user %}
+{% set path = request.url.path %}
+<div class="app">
+  <aside class="sidebar">
+    <a class="brand" href="/"><span class="brand-mark">{{ icon("pulse") }}</span><span>PocketWatcher</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="/"{% if path == "/" %} aria-current="page"{% endif %}>{{ icon("overview") }}<span>Overview</span></a>
+      <a href="/analytics"{% if path.startswith("/analytics") %} aria-current="page"{% endif %}>{{ icon("analytics") }}<span>Analytics</span></a>
+      <a href="/channels"{% if path.startswith("/channels") %} aria-current="page"{% endif %}>{{ icon("channels") }}<span>Channels</span></a>
+    </nav>
+    <div class="nav-section" aria-label="Workspaces">
+      <div class="nav-title"><span>Workspaces</span><a href="/workspaces/new" aria-label="Connect a workspace" title="Connect a workspace">{{ icon("plus") }}</a></div>
+      {% for w, status in nav_workspaces %}
+      <a href="/workspaces/{{ w.id }}"{% if path == "/workspaces/" ~ w.id %} aria-current="page"{% endif %} title="{{ w.name }}: {{ status_labels[status] }}"><span class="dot dot-{{ status }}"></span><span class="name">{{ w.name }}</span></a>
+      {% else %}
+      <a href="/workspaces/new" class="muted">{{ icon("plus") }}<span>Connect a workspace</span></a>
+      {% endfor %}
+    </div>
+    <div class="sidebar-foot">
+      <span class="who" title="{{ user.email }}">{{ user.email }}</span>
+      <form class="inline" method="post" action="/logout">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn btn-ghost btn-sm" type="submit" aria-label="Sign out">{{ icon("logout") }}Sign out</button>
+      </form>
+    </div>
+  </aside>
+  <div class="main">
+    <main class="content">
+      {% if flash and not flash.near %}{{ notice(flash) }}{% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% else %}
+{% block standalone %}{% endblock %}
+{% endif %}
+<div class="viz-tip" id="viz-tip" role="status" aria-live="polite"></div>
+<script>
+  // Copy buttons on setup commands; the page works without this.
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-copy]");
+    if (!btn) return;
+    const text = btn.closest(".code").querySelector("pre").innerText;
+    try { await navigator.clipboard.writeText(text); } catch { return; }
+    btn.dataset.copied = ""; btn.textContent = "Copied";
+    setTimeout(() => { delete btn.dataset.copied; btn.textContent = "Copy"; }, 1600);
+  });
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

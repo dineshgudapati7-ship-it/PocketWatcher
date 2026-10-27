@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_ui.html" import icon %}
+{% block title %}Mute alert · PocketWatcher{% endblock %}
+{% block standalone %}
+<main class="single">
+  <a class="brand" href="/" style="justify-content: center; padding-bottom: 20px"><span class="brand-mark">{{ icon("pulse") }}</span><span>PocketWatcher</span></a>
+  <div class="card">
+    <div class="card-body">
+    {% if state == "confirm" %}
+      <h1>Mute this alert for {{ days }} days?</h1>
+      <p>You won't get this alert{% if workspace %} for {{ workspace.name }}{% endif %} again until the mute ends. Other alerts are unaffected.</p>
+      <form method="post" action="/mute">
+        <input type="hidden" name="t" value="{{ token }}">
+        <button class="btn btn-primary" type="submit">Mute for {{ days }} days</button>
+      </form>
+    {% elif state == "done" %}
+      <h1>Alert muted</h1>
+      <p>It stays muted until {{ until.strftime("%b %d, %Y %H:%M") }} UTC.</p>
+    {% else %}
+      <h1>This link is invalid or has expired</h1>
+      <p>Mute links work for 30 days. Use the link in a newer alert.</p>
+    {% endif %}
+    </div>
+  </div>
+</main>
+{% endblock %}
