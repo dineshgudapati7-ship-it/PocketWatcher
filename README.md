@@ -3,7 +3,10 @@
 Cost guardrails for Databricks workspaces. PocketWatcher connects as a **read-only service principal**,
 reads `system.billing.*` through the customer's SQL warehouse, and sends opinionated alerts:
 budget overruns, spend spikes, new high spenders, Photon/serverless on dev, untagged spend, and a
-weekly top-10 digest.
+weekly top-10 digest, with a cost analytics page for finance and engineering leads.
+
+**New here? Start with the [runbook](docs/RUNBOOK.md):** setup, running, sample data, troubleshooting, and
+what is and is not verified yet.
 
 ## What the numbers mean
 
@@ -46,5 +49,6 @@ Migrations: `uv run alembic upgrade head` (uses `PW_DATABASE_URL`).
 | `src/pocketwatcher/alerts/` | Dispatcher (dedupe, repeats, escalation, mutes) and Slack/Teams/email renderers |
 | `src/pocketwatcher/onboarding/` | Customer setup grants, preflight checks, test alert |
 | `src/pocketwatcher/worker.py` | Scheduler loop: billing every 6 h, live checks every 15 min |
-| `src/pocketwatcher/web/` | FastAPI app (mute links so far) |
+| `src/pocketwatcher/web/` | FastAPI app: sign-in, connect wizard, overview, analytics, channels, mute links |
+| `src/pocketwatcher/analytics.py` | The figures behind the analytics page, as plain testable functions |
 | `tests/fixtures/system_tables.py` | Schema-accurate fake `system.billing` tables in DuckDB |
