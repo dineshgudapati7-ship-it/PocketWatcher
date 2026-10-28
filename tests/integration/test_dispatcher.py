@@ -119,13 +119,24 @@ def test_channels_of_other_tenants_and_workspaces_are_ignored(session, workspace
     from pocketwatcher.db.models import Tenant
 
     other = Tenant(name="Other")
-    session.add(other)
+    # A real row, not a made-up id: Postgres enforces the channel's foreign key, SQLite does not.
+    sibling = Workspace(
+        tenant_id=workspace.tenant_id,
+        name="acme-dev",
+        host=workspace.host,
+        databricks_workspace_id=workspace.databricks_workspace_id + 1,
+        cloud="AZURE",
+        client_id="sp-client",
+        client_secret_enc="x",
+        warehouse_id="wh2",
+    )
+    session.add_all([other, sibling])
     session.flush()
     session.add(Channel(tenant_id=other.id, name="x", kind="slack", target_enc=crypto.encrypt("u")))
     session.add(
         Channel(
             tenant_id=workspace.tenant_id,
-            workspace_id=workspace.id + 100,
+            workspace_id=sibling.id,
             name="y",
             kind="slack",
             target_enc=crypto.encrypt("u"),

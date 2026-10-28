@@ -17,6 +17,7 @@ if config.config_file_name is not None:
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 from pocketwatcher.db.models import Base
+from pocketwatcher.db.session import connect_args
 from pocketwatcher.settings import get_settings
 
 target_metadata = Base.metadata
@@ -63,6 +64,7 @@ def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args(get_settings().database_url),
     )
 
     with connectable.connect() as connection:
