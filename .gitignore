@@ -10,3 +10,5 @@ dist/
 .playwright-mcp/
 .impeccable/mocks/
 .impeccable/review/
+
+.databricks

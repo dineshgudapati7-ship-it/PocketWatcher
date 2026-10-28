@@ -1,0 +1,29 @@
+# A small, known workload for checking PocketWatcher against a real workspace.
+# It creates billing records with known tags so PocketWatcher's figures can be compared
+# with the Databricks usage page. See README.md in this folder.
+
+bundle:
+  name: pocketwatcher-testbed
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://adb-7405608768294991.11.azuredatabricks.net
+
+resources:
+  jobs:
+    nightly_etl:
+      name: testbed-nightly-etl
+      description: Synthetic ETL on serverless compute, tagged as a production team job.
+      tags:
+        team: data-platform
+        env: prod
+      tasks:
+        - task_key: aggregate
+          # No cluster settings: runs on serverless jobs compute.
+          notebook_task:
+            notebook_path: ./src/aggregate.py
+            base_parameters:
+              rows: "50000000"
