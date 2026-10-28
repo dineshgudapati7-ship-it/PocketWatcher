@@ -41,36 +41,32 @@
   {% endif %}
 </section>
 
-<section class="card" style="margin-top: 20px" id="add-channel">
+<section class="card" id="add-channel">
   <div class="card-header"><div><h2>Add a channel</h2><p>Webhook URLs and addresses are stored encrypted.</p></div></div>
   <form method="post" action="/channels">
     <div class="card-body">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       {% if flash and flash.near == "add-channel" %}{{ notice(flash) }}{% endif %}
       <div class="fields">
-        <div class="field"><label for="kind">Type</label>
+        <div class="field span-3"><label for="kind">Type</label>
           <select id="kind" name="kind">
             <option value="slack">Slack incoming webhook</option>
             <option value="teams">Microsoft Teams Workflows webhook</option>
             <option value="email">Email</option>
           </select></div>
-        <div class="field"><label for="name">Name</label><input id="name" name="name" placeholder="#data-costs" required></div>
-      </div>
-      <div class="fields">
-        <div class="field"><label for="target">Webhook URL or email addresses</label>
+        <div class="field span-3"><label for="name">Name</label><input id="name" name="name" placeholder="e.g. #data-costs" required></div>
+        <div class="field span-6"><label for="target">Webhook URL or email addresses</label>
           <input id="target" name="target" required autocomplete="off" spellcheck="false"
-                 placeholder="https://hooks.slack.com/services/…  or  finance@acme.com, lead@acme.com">
-          <span class="hint">Slack: hooks.slack.com/services/… · Teams: the URL from a "When a Teams webhook request is received" workflow · Email: comma-separated.</span></div>
-      </div>
-      <div class="fields">
-        <div class="field"><label for="min_severity">Send</label>
+                 placeholder="e.g. https://hooks.slack.com/services/…" aria-describedby="target-hint">
+          <span class="hint" id="target-hint">Slack: hooks.slack.com/services/… · Teams: the URL from a "When a Teams webhook request is received" workflow · Email: comma-separated, such as finance@acme.com, lead@acme.com.</span></div>
+        <div class="field span-3"><label for="min_severity">Send</label>
           <select id="min_severity" name="min_severity">
             <option value="warning">Warnings and critical</option>
             <option value="critical">Critical only</option>
             <option value="info">Everything</option>
           </select>
           <span class="hint">The weekly digest goes to every channel.</span></div>
-        <div class="field"><label for="workspace_id">Workspaces</label>
+        <div class="field span-3"><label for="workspace_id">Workspaces</label>
           <select id="workspace_id" name="workspace_id">
             <option value="">All workspaces</option>
             {% for w in workspaces %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}

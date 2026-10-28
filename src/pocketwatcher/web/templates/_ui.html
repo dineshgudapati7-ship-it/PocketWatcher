@@ -10,6 +10,7 @@
 {%- elif name == "check" %}<circle cx="8" cy="8" r="6"/><path d="m5.5 8.2 1.7 1.7 3.3-3.6"/>
 {%- elif name == "alert" %}<circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 10.9v.1"/>
 {%- elif name == "download" %}<path d="M8 2.5v8M4.5 7.5 8 11l3.5-3.5"/><path d="M2.5 13.5h11"/>
+{%- elif name == "sync" %}<path d="M13 8a5 5 0 0 1-8.6 3.5"/><path d="M3 8a5 5 0 0 1 8.6-3.5"/><path d="M11.8 2v2.7H9.1"/><path d="M4.2 14v-2.7h2.7"/>
 {%- elif name == "pulse" %}<path d="M1.5 8h3l2-4.5 3 9 2-4.5h3"/>
 {%- elif name == "system" %}<rect x="2" y="2.5" width="12" height="8.5" rx="1.5"/><path d="M5.5 13.5h5M8 11v2.5"/>
 {%- elif name == "sun" %}<circle cx="8" cy="8" r="2.8"/><path d="M8 1.5v1.3M8 13.2v1.3M1.5 8h1.3M13.2 8h1.3M3.4 3.4l.9.9M11.7 11.7l.9.9M3.4 12.6l.9-.9M11.7 4.3l.9-.9"/>
@@ -30,27 +31,39 @@
 {%- endmacro %}
 
 {% macro workspace_summary(ws, o, link=True) -%}
+{# On a workspace's own page the h1 already names it, so the first cell only says how fresh the data is. #}
 {% set tag = "a" if link else "div" %}
+{% set sync_note %}{% if ws.billing_synced_at %}Synced {{ ws.billing_synced_at | day_time }} UTC{% if not o.has_data %} · Databricks has no billing records yet; they usually appear within a day{% endif %}{% else %}First sync within minutes{% endif %}{% endset %}
 <{{ tag }} class="card summary"{% if link %} href="/workspaces/{{ ws.id }}"{% endif %}>
   <div>
+    {% if link %}
     <span class="ws-name">{{ ws.name }}</span>
     <span class="ws-host" title="{{ ws.host }}">{{ ws.cloud | title }} · {{ ws.host | replace("https://", "") }}</span>
-    <span class="s">{% if ws.billing_synced_at %}Synced {{ ws.billing_synced_at.strftime("%b %d, %H:%M") }} UTC{% else %}First sync within minutes{% endif %}</span>
+    <span class="s">{{ sync_note }}</span>
+    {% else %}
+    <span class="k">Last billing sync</span>
+    {% if ws.billing_synced_at %}<span class="v v-text">{{ ws.billing_synced_at | day_time }} UTC</span>
+    <span class="s">{% if not o.has_data %}Databricks has no billing records yet; they usually appear within a day{% else %}{{ ws.cloud | title }} · checked every 6 hours{% endif %}</span>
+    {% else %}<span class="v unset">Pending</span>
+    <span class="s">First sync within minutes</span>{% endif %}
+    {% endif %}
   </div>
   <div>
     <span class="k">Month to date</span>
-    <span class="v">{{ o.month_to_date | usd if o.has_data else "—" }}</span>
-    <span class="s">Through {{ o.through.strftime("%b %d") }}</span>
+    {% if o.has_data %}<span class="v">{{ o.month_to_date | usd0 }}</span>
+    <span class="s">Through {{ o.through | day }}</span>
+    {% else %}<span class="v unset">—</span>{% endif %}
   </div>
   <div>
-    <span class="k">Forecast, {{ o.month_end.strftime("%b %d") }}</span>
-    <span class="v">{{ o.forecast | usd if o.has_data else "—" }}</span>
+    <span class="k">Forecast, {{ o.month_end | day }}</span>
+    {% if o.has_data %}<span class="v">{{ o.forecast | usd0 }}</span>
     <span class="s">At the last 7 days' pace</span>
+    {% else %}<span class="v unset">—</span>{% endif %}
   </div>
   <div>
     <span class="k">Monthly budget</span>
-    {% if o.budget %}<span class="v">{{ o.budget | usd }}</span>
-    <span class="s">{% if o.has_data and o.forecast > o.budget %}{{ (o.forecast - o.budget) | usd }} over at month end{% elif o.has_data %}{{ (o.budget - o.forecast) | usd }} headroom{% else %}Set{% endif %}</span>
+    {% if o.budget %}<span class="v">{{ o.budget | usd0 }}</span>
+    <span class="s">{% if o.has_data and o.forecast > o.budget %}<span class="delta delta-up">{{ (o.forecast - o.budget) | usd0 }} over</span> at month end{% elif o.has_data %}{{ (o.budget - o.forecast) | usd0 }} headroom{% else %}Set{% endif %}</span>
     {% else %}<span class="v unset">Not set</span><span class="s">Add one in settings</span>{% endif %}
   </div>
   <div>
@@ -66,17 +79,18 @@
 {%- endmacro %}
 
 {% macro alert_table(rows, names, show_workspace=True) -%}
+{# On phones each row becomes a stacked item: the title, then one meta line. #}
 <div class="table-wrap">
-<table class="table">
+<table class="table alerts">
   <thead><tr><th>Alert</th>{% if show_workspace %}<th>Workspace</th>{% endif %}<th class="r">Impact</th><th>Delivery</th><th>Sent (UTC)</th></tr></thead>
   <tbody>
   {% for r in rows %}
     <tr>
-      <td><span class="strong"><span class="sev sev-{{ r.severity }}" aria-label="{{ r.severity }}"></span>{{ r.title }}</span>{% if r.lit %} <span class="badge badge-new badge-plain">New</span>{% endif %}</td>
-      {% if show_workspace %}<td>{{ names.get(r.workspace_id, "") }}</td>{% endif %}
-      <td class="r strong">{{ r.impact_usd | usd if r.impact_usd else "—" }}</td>
-      <td>{% if r.failed and not r.sent %}<span class="badge badge-failed" title="{{ r.error or '' }}">Failed</span>{% elif r.failed %}<span class="badge badge-warn" title="{{ r.error or '' }}">{{ r.sent }} sent, {{ r.failed }} failed</span>{% else %}<span class="badge badge-sent">Sent{% if r.sent > 1 %} to {{ r.sent }}{% endif %}</span>{% endif %}</td>
-      <td class="when">{{ r.created_at.strftime("%b %d, %H:%M") }}</td>
+      <td class="alert-title"><span class="strong"><span class="sev sev-{{ r.severity }}" role="img" aria-label="{{ r.severity }}"></span>{{ r.title }}</span>{% if r.lit %} <span class="badge badge-new badge-plain">New</span>{% endif %}</td>
+      {% if show_workspace %}<td class="meta">{{ names.get(r.workspace_id, "") }}</td>{% endif %}
+      <td class="r strong meta{% if not r.impact_usd %} no-impact{% endif %}">{{ r.impact_usd | usd0 if r.impact_usd else "—" }}</td>
+      <td class="meta">{% if r.failed and not r.sent %}<span class="badge badge-failed" title="{{ r.error or '' }}">Failed</span>{% elif r.failed %}<span class="badge badge-warn" title="{{ r.error or '' }}">{{ r.sent }} sent, {{ r.failed }} failed</span>{% else %}<span class="badge badge-sent">Sent{% if r.sent > 1 %} to {{ r.sent }}{% endif %}</span>{% endif %}</td>
+      <td class="when meta"><time datetime="{{ r.created_at.isoformat() }}">{{ r.created_at | day_time }}</time></td>
     </tr>
   {% endfor %}
   </tbody>
@@ -101,4 +115,13 @@
   <button type="button" data-theme-choice="light" aria-pressed="false" title="Light">{{ icon("sun") }}<span class="sr-only">Light</span></button>
   <button type="button" data-theme-choice="dark" aria-pressed="false" title="Dark">{{ icon("moon") }}<span class="sr-only">Dark</span></button>
 </div>
+{%- endmacro %}
+
+{% macro setting_field(id, label, value, hint, rejected=None, span="span-2", placeholder="", inputmode="") -%}
+{# A settings input. After a rejected save it shows what was typed, and the field at fault says why. #}
+{% set bad = rejected and rejected.field == id %}
+<div class="field {{ span }}"><label for="{{ id }}">{{ label }}</label>
+  <input id="{{ id }}" name="{{ id }}" value="{{ rejected['values'][id] if rejected else value }}"{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if inputmode %} inputmode="{{ inputmode }}"{% endif %} aria-describedby="{% if bad %}{{ id }}-error {% endif %}{{ id }}-hint"{% if bad %} aria-invalid="true"{% endif %}>
+  {% if bad %}<span class="field-error" id="{{ id }}-error">{{ rejected.error }}</span>{% endif %}
+  <span class="hint" id="{{ id }}-hint">{{ hint }}</span></div>
 {%- endmacro %}

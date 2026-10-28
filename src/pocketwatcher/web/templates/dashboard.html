@@ -14,8 +14,10 @@
 <div class="notice notice-warn" role="status">{{ icon("alert") }}<span>No alert channels yet, so nothing will be sent. <a href="/channels">Add Slack, Teams or email</a></span></div>
 {% endif %}
 
-{% for ws, o in passes %}
-  {{ workspace_summary(ws, o) }}
+{% if passes %}
+<div class="list">
+  {% for ws, o in passes %}{{ workspace_summary(ws, o) }}{% endfor %}
+</div>
 {% else %}
 <div class="card">
   <div class="empty">
@@ -24,9 +26,9 @@
     <a class="btn btn-primary" href="/workspaces/new">{{ icon("plus") }}Connect a workspace</a>
   </div>
 </div>
-{% endfor %}
+{% endif %}
 
-<section class="card" style="margin-top: 24px" aria-labelledby="alerts-title">
+<section class="card" aria-labelledby="alerts-title">
   <div class="card-header">
     <div><h2 id="alerts-title">Recent alerts</h2><p>Ranked by cost impact{% set new = board | selectattr("lit") | list %}{% if new %} · {{ new | length }} new since your last visit{% endif %}</p></div>
   </div>

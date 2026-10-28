@@ -35,6 +35,10 @@ BILLING_INTERVAL = timedelta(hours=6)
 LIVE_INTERVAL = timedelta(minutes=15)
 RETRY_AFTER_ERROR = timedelta(minutes=30)
 BURN_DAYS = 7
+# "Sync now": each billing sync wakes the customer's SQL warehouse, so manual syncs are spaced out.
+MANUAL_SYNC_COOLDOWN = timedelta(minutes=5)
+# A claimed billing sync that has not finished after this long is taken to have died with its worker.
+SYNC_PRESUMED_LOST = timedelta(minutes=30)
 
 
 class Connector(Protocol):
@@ -53,17 +57,43 @@ class DatabricksConnector:
 
 def billing_task(session: Session, ws: Workspace, connector: Connector, send: Sender, now: datetime) -> None:
     today = now.date()
-    sync_billing(session, ws, connector.warehouse(ws), today)
+    synced = sync_billing(session, ws, connector.warehouse(ws), today)
     rows = load_costs(session, ws, *billing_window(today))
     cfg = RuleConfig.model_validate(ws.rule_config or {})
     findings = run_billing_rules(rows, cfg, _ref(ws), today, include_digest=today.weekday() == 0)
-    dispatch(session, ws, findings, send, now)
+    sent = dispatch(session, ws, findings, send, now)
+    log.info(
+        "billing sync ok: workspace %s '%s': %d day(s) read, %d cost row(s), %d finding(s), "
+        "%d alert(s) sent, %d failed",
+        ws.id,
+        ws.name,
+        len(synced.dates),
+        synced.rows,
+        len(findings),
+        sent.sent,
+        sent.failed,
+    )
+    if synced.unpriced_quantity:
+        log.warning(
+            "workspace %s: %.2f units had no list price, so their cost counts as $0", ws.id, synced.unpriced_quantity
+        )
 
 
 def live_task(session: Session, ws: Workspace, connector: Connector, send: Sender, now: datetime) -> None:
     snap = connector.snapshot(ws, now)
     cfg = RuleConfig.model_validate(ws.rule_config or {})
-    dispatch(session, ws, live.evaluate(snap, cfg, _ref(ws), recent_daily_cost(session, ws, now)), send, now)
+    findings = live.evaluate(snap, cfg, _ref(ws), recent_daily_cost(session, ws, now))
+    sent = dispatch(session, ws, findings, send, now)
+    log.info(
+        "live check ok: workspace %s '%s': %d running cluster(s), %d running warehouse(s), %d finding(s), "
+        "%d alert(s) sent",
+        ws.id,
+        ws.name,
+        len(snap.clusters),
+        len(snap.warehouses),
+        len(findings),
+        sent.sent,
+    )
 
 
 def recent_daily_cost(session: Session, ws: Workspace, now: datetime) -> dict[tuple[str, str], float]:
@@ -103,15 +133,49 @@ def run_once(sessions: sessionmaker, connector: Connector, send: Sender, now: da
                     break
                 setattr(ws, column.key, current + interval)
                 session.commit()  # releases the row lock; the pushed-forward time keeps others off it
+                ws_id = ws.id
                 try:
                     task(session, ws, connector, send, current)
                 except Exception:
-                    log.exception("%s failed for workspace %s", task.__name__, ws.id)
+                    log.exception("%s failed for workspace %s", task.__name__, ws_id)
                     session.rollback()
-                    setattr(ws, column.key, current + RETRY_AFTER_ERROR)
-                    session.commit()
+                    # Removed by its owner while the task ran: nothing left to retry. Ask the
+                    # database, not the session, which may still hold the deleted row.
+                    if session.scalar(select(Workspace.id).where(Workspace.id == ws_id)) is not None:
+                        setattr(ws, column.key, current + RETRY_AFTER_ERROR)
+                        session.commit()
                 ran += 1
     return ran
+
+
+def sync_refusal(ws: Workspace, now: datetime) -> str | None:
+    """Why a manual sync can't be queued right now, or None if it can. Read from the schedule
+    columns alone: a due next_billing_at is a sync waiting for a worker; a next_billing_at one
+    interval after a claim newer than the last finished sync is a sync still running."""
+    next_billing, synced = _utc(ws.next_billing_at), _utc(ws.billing_synced_at)
+    if next_billing is None or next_billing <= now:
+        return "A sync is already queued; the worker picks it up within a minute if it is running."
+    claimed = next_billing - BILLING_INTERVAL
+    if now - SYNC_PRESUMED_LOST < claimed <= now and (synced is None or claimed > synced):
+        return f"A sync started at {claimed:%H:%M} UTC and has not finished yet."
+    if synced is not None and now < synced + MANUAL_SYNC_COOLDOWN:
+        ready = synced + MANUAL_SYNC_COOLDOWN
+        if ready.second or ready.microsecond:  # round up: "after 08:20" must really mean allowed then
+            ready = ready.replace(second=0, microsecond=0) + timedelta(minutes=1)
+        return f"A sync ran at {synced:%H:%M} UTC; try again after {ready:%H:%M} UTC."
+    return None
+
+
+def queue_sync(ws: Workspace, now: datetime) -> None:
+    """Make the billing sync and live check due now. The worker claims them as usual, so a
+    manual sync never runs in the web process or alongside a worker's own run of the same task."""
+    ws.next_billing_at = now
+    ws.next_live_at = now
+
+
+def _utc(value: datetime | None) -> datetime | None:
+    # SQLite hands back naive datetimes; they are stored as UTC.
+    return value.replace(tzinfo=UTC) if value is not None and value.tzinfo is None else value
 
 
 def _ref(ws: Workspace) -> WorkspaceRef:
@@ -120,6 +184,9 @@ def _ref(ws: Workspace) -> WorkspaceRef:
 
 def main() -> None:  # pragma: no cover - process entry point
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    # httpx logs every request URL at INFO, and a Slack or Teams webhook URL is a secret.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    log.info("worker started: billing every %s, live checks every %s", BILLING_INTERVAL, LIVE_INTERVAL)
     sessions = make_sessionmaker(make_engine())
     with httpx.Client() as http:
         send, connector = make_sender(http), DatabricksConnector()

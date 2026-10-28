@@ -49,6 +49,11 @@ RANGES: dict[str, str] = {
 }
 
 
+def short_day(d: date, year: bool = False) -> str:
+    """ "Oct 1", not "Oct 01". `%-d` is not portable (Windows), so the day is formatted by hand."""
+    return f"{d:%b} {d.day}, {d.year}" if year else f"{d:%b} {d.day}"
+
+
 def product_group(product: str | None) -> str:
     return PRODUCT_MAP.get((product or "").upper(), "other")
 
@@ -74,8 +79,13 @@ class Period:
         last = self.end - timedelta(days=1)
         dash = chr(0x2013)  # en dash for ranges
         if self.start.year == last.year:
-            return f"{self.start:%b %d} {dash} {last:%b %d, %Y}"
-        return f"{self.start:%b %d, %Y} {dash} {last:%b %d, %Y}"
+            return f"{short_day(self.start)} {dash} {short_day(last, year=True)}"
+        return f"{short_day(self.start, year=True)} {dash} {short_day(last, year=True)}"
+
+    @property
+    def short_label(self) -> str:
+        """Without the year, for a line that sits under the full label."""
+        return f"{short_day(self.start)} {chr(0x2013)} {short_day(self.end - timedelta(days=1))}"
 
     def previous(self) -> "Period":
         """The equal-length period just before; for whole months, the previous whole month."""
@@ -253,8 +263,9 @@ def build_report(
         notes.append("No usage in this period yet.")
     earliest = min((r.usage_date for r in rows), default=None)
     comparable = earliest is not None and earliest <= prev.start
-    if cur and not comparable:
-        notes.append(f"History starts {earliest:%b %d, %Y}, so there is no full previous period to compare with.")
+    if cur and earliest is not None and not comparable:
+        starts = short_day(earliest, year=True)
+        notes.append(f"History starts {starts}, so there is no full previous period to compare with.")
     return Report(
         period=period,
         previous=prev,
@@ -360,7 +371,6 @@ def _buckets(cur: list[CostRow], period: Period) -> list[Bucket]:
     by: dict[date, dict[str, float]] = {s: defaultdict(float) for s in starts}
     for r in cur:
         by[_bucket_start(r.usage_date, unit)][product_group(r.product)] += r.cost
-    fmt = {"day": "%b %d", "week": "Wk of %b %d", "month": "%b %Y"}[unit]
     last_day = period.end - timedelta(days=1)
 
     def label(s: date) -> str:
@@ -370,7 +380,9 @@ def _buckets(cur: list[CostRow], period: Period) -> list[Bucket]:
             and s.year == last_day.year
             and last_day.day < calendar.monthrange(s.year, s.month)[1]
         )
-        return s.strftime(fmt) + (" (to date)" if partial else "")
+        if unit == "month":
+            return f"{s:%b %Y}" + (" (to date)" if partial else "")
+        return f"Wk of {short_day(s)}" if unit == "week" else short_day(s)
 
     return [Bucket(s, label(s), dict(by[s])) for s in starts]
 

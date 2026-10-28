@@ -44,7 +44,7 @@
     </div>
   </aside>
   <div class="main">
-    <main class="content">
+    <main class="content stack">
       {% if flash and not flash.near %}{{ notice(flash) }}{% endif %}
       {% block content %}{% endblock %}
     </main>

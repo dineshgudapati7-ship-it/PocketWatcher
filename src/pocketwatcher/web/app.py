@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -22,10 +22,10 @@ from pocketwatcher import crypto
 from pocketwatcher.alerts.dispatcher import Sender, make_sender
 from pocketwatcher.alerts.links import read_mute_token
 from pocketwatcher.alerts.targets import validate_target
-from pocketwatcher.analytics import CSV_COLUMNS, PRODUCT_GROUPS, RANGES, build_report, period_for
+from pocketwatcher.analytics import CSV_COLUMNS, PRODUCT_GROUPS, RANGES, build_report, period_for, short_day
 from pocketwatcher.collectors.billing import load_costs
 from pocketwatcher.databricks.client import DatabricksWarehouse
-from pocketwatcher.db.models import AlertLog, Channel, Mute, Tenant, User, Workspace
+from pocketwatcher.db.models import AlertLog, Channel, DailyCost, Mute, Tenant, User, Workspace
 from pocketwatcher.db.session import make_engine, make_sessionmaker
 from pocketwatcher.onboarding.preflight import Check, PreflightResult, normalize_host, run_preflight
 from pocketwatcher.onboarding.setup_sql import setup_steps
@@ -34,13 +34,17 @@ from pocketwatcher.rules.base import usd
 from pocketwatcher.rules.config import RuleConfig
 from pocketwatcher.settings import get_settings
 from pocketwatcher.web.auth import AuthProvider, WorkOSAuth
-from pocketwatcher.web.charts import GROUP_SLOT, burn_chart, column_chart, compact_usd
+from pocketwatcher.web.charts import GROUP_SLOT, burn_chart, column_chart, compact_usd, usd0
 from pocketwatcher.web.summary import STATUS_LABELS, workspace_outlook
+from pocketwatcher.worker import queue_sync, sync_refusal
 
 WEB_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=WEB_DIR / "templates")
 templates.env.filters["usd"] = usd
+templates.env.filters["usd0"] = usd0  # the web UI's money format; alerts keep `usd`
 templates.env.filters["compact"] = compact_usd
+templates.env.filters["day"] = short_day  # "Oct 1"
+templates.env.filters["day_time"] = lambda d: f"{short_day(d)}, {d:%H:%M}"  # "Oct 1, 08:46"
 templates.env.globals["group_slot"] = GROUP_SLOT
 templates.env.globals["product_labels"] = PRODUCT_GROUPS
 templates.env.filters["plain"] = lambda v: f"{v:.2f}".rstrip("0").rstrip(".")
@@ -324,6 +328,20 @@ def create_app(
         if not result.ok or result.workspace_id is None:
             # The secret is never echoed back or stored when preflight fails.
             return render(request, "workspace_new.html", {**ctx, "preflight": result}, status=422)
+        # A second copy would sync twice: every alert sent twice, twice the warehouse time.
+        existing = db.scalars(
+            select(Workspace).where(
+                Workspace.tenant_id == user.tenant_id,
+                or_(Workspace.databricks_workspace_id == result.workspace_id, Workspace.host == host),
+            )
+        ).first()
+        if existing is not None:
+            return redirect(
+                f"/workspaces/{existing.id}",
+                f"This Databricks workspace is already connected as '{existing.name}'.",
+                request,
+                error=True,
+            )
 
         ws = Workspace(
             tenant_id=user.tenant_id,
@@ -350,6 +368,8 @@ def create_app(
         ws = own_workspace(db, user, workspace_id)
         cfg = RuleConfig.model_validate(ws.rule_config or {})
         checks = request.session.pop("preflight", None)
+        # A rejected settings form comes back with what was typed and which field was wrong.
+        rejected = request.session.pop("settings_form", None)
         now = datetime.now(UTC)
         ctx = {
             "user": user,
@@ -359,8 +379,26 @@ def create_app(
             # One workspace's history doesn't count as having seen the whole board.
             "board": board(request, db, [ws.id], now, mark_seen=False),
             "checks": checks,
+            "sync_block": sync_refusal(ws, now),
+            "rejected": rejected,
         }
         return render(request, "workspace.html", ctx)
+
+    @app.post("/workspaces/{workspace_id}/sync", dependencies=[Csrf])
+    def workspace_sync(request: Request, db: Db, user: CurrentUser, workspace_id: int) -> RedirectResponse:
+        # Only marks the work due; the worker runs it, so a slow sync never ties up a web request.
+        ws = own_workspace(db, user, workspace_id)
+        now = datetime.now(UTC)
+        refusal = sync_refusal(ws, now)
+        if refusal:
+            return redirect(f"/workspaces/{ws.id}", refusal, request, error=True)
+        queue_sync(ws, now)
+        db.commit()
+        return redirect(
+            f"/workspaces/{ws.id}",
+            "Sync queued. The worker picks it up within a minute if it is running; refresh to see the result.",
+            request,
+        )
 
     @app.post("/workspaces/{workspace_id}/settings", dependencies=[Csrf])
     def workspace_settings(
@@ -376,22 +414,60 @@ def create_app(
     ) -> RedirectResponse:
         ws = own_workspace(db, user, workspace_id)
         cfg = RuleConfig.model_validate(ws.rule_config or {})
+        submitted = {
+            "daily_usd": daily_usd,
+            "monthly_usd": monthly_usd,
+            "required_tags": required_tags,
+            "dev_tag_values": dev_tag_values,
+            "discount_percent": discount_percent,
+        }
+        field: str | None = None  # the input being read when a value is rejected
         try:
-            cfg.budget.daily_usd = _money(daily_usd)
+            field = "monthly_usd"
             cfg.budget.monthly_usd = _money(monthly_usd)
-            cfg.untagged.required_tags = _list(required_tags)
-            if dev_tag_values.strip():
-                cfg.dev_premium.tag_values = _list(dev_tag_values)
-            discount = float(discount_percent or 0)
+            field = "daily_usd"
+            cfg.budget.daily_usd = _money(daily_usd)
+            field = "discount_percent"
+            discount = _number(discount_percent or "0")
             if not 0 <= discount < 100:
                 raise ValueError("Discount must be between 0 and 99%.")
+            field = "required_tags"
+            cfg.untagged.required_tags = _list(required_tags)
+            field = "dev_tag_values"
+            if dev_tag_values.strip():
+                cfg.dev_premium.tag_values = _list(dev_tag_values)
+            field = None
             cfg = RuleConfig.model_validate(cfg.model_dump())
         except (ValueError, ValidationError) as exc:
-            return redirect(f"/workspaces/{ws.id}", f"Not saved: {exc}", request, error=True, near="settings")
+            message = str(exc)
+            request.session["settings_form"] = {"values": submitted, "field": field, "error": message}
+            return redirect(f"/workspaces/{ws.id}", f"Not saved: {message}", request, error=True, near="settings")
         ws.rule_config = cfg.model_dump()
         ws.discount_multiplier = 1 - discount / 100
         db.commit()
         return redirect(f"/workspaces/{ws.id}", "Settings saved.", request, near="settings")
+
+    @app.post("/workspaces/{workspace_id}/delete", dependencies=[Csrf])
+    def workspace_delete(
+        request: Request, db: Db, user: CurrentUser, workspace_id: int, confirm: Annotated[str, Form()] = ""
+    ) -> RedirectResponse:
+        ws = own_workspace(db, user, workspace_id)
+        if confirm.strip() != ws.name:
+            return redirect(
+                f"/workspaces/{ws.id}",
+                "Not removed: type the workspace name exactly.",
+                request,
+                error=True,
+                near="remove",
+            )
+        name, client_id = ws.name, ws.client_id
+        remove_workspace(db, ws)
+        return redirect(
+            "/",
+            f"Removed '{name}' and its cost and alert history. PocketWatcher no longer connects to it. "
+            f"To revoke access in Databricks too, delete the service principal {client_id} there.",
+            request,
+        )
 
     # --- analytics ----------------------------------------------------------
 
@@ -421,7 +497,7 @@ def create_app(
             "range_key": period.key,
             "ranges": RANGES,
             "report": report,
-            "columns": column_chart(report.buckets),
+            "columns": column_chart(report.buckets, report.bucket_unit),
             "burn": burn_chart(report.burn) if report.burn else None,
             "has_data": any(w.billing_synced_at for w in scope),
         }
@@ -541,7 +617,8 @@ def create_app(
         if payload is None:
             return render(request, "mute.html", {"state": "invalid"}, status=400)
         ws = db.get(Workspace, payload["ws"])
-        return render(request, "mute.html", {"state": "confirm", "token": t, "days": payload["days"], "workspace": ws})
+        ctx = {"state": "confirm", "token": t, "days": payload["days"], "workspace": ws}
+        return render(request, "mute.html", {**ctx, "alert_title": _alert_title(db, payload)})
 
     @app.post("/mute", response_class=HTMLResponse)
     def mute_apply(request: Request, db: Db, t: Annotated[str, Form()]) -> HTMLResponse:
@@ -551,9 +628,19 @@ def create_app(
         until = datetime.now(UTC) + timedelta(days=payload["days"])
         db.add(Mute(workspace_id=payload["ws"], fingerprint=payload["fp"], until=until))
         db.commit()
-        return render(request, "mute.html", {"state": "done", "until": until})
+        return render(request, "mute.html", {"state": "done", "until": until, "alert_title": _alert_title(db, payload)})
 
     return app
+
+
+def _alert_title(db: Session, payload: dict[str, Any]) -> str | None:
+    """The latest title sent for this finding, so the mute page can say what it mutes."""
+    return db.scalar(
+        select(AlertLog.title)
+        .where(AlertLog.workspace_id == payload["ws"], AlertLog.fingerprint == payload["fp"])
+        .order_by(AlertLog.created_at.desc())
+        .limit(1)
+    )
 
 
 def _cell(value: str) -> str:
@@ -561,11 +648,29 @@ def _cell(value: str) -> str:
     return f"'{value}" if value[:1] in ("=", "+", "-", "@", chr(9), chr(13)) else value
 
 
+def remove_workspace(db: Session, ws: Workspace) -> None:
+    """Delete a workspace and everything that belongs only to it, in one transaction. Channels
+    shared by all workspaces stay. A worker mid-task on it fails its writes and drops the task."""
+    own_channels = select(Channel.id).where(Channel.workspace_id == ws.id)
+    db.execute(delete(AlertLog).where(or_(AlertLog.workspace_id == ws.id, AlertLog.channel_id.in_(own_channels))))
+    db.execute(delete(Mute).where(Mute.workspace_id == ws.id))
+    db.execute(delete(DailyCost).where(DailyCost.workspace_id == ws.id))
+    db.execute(delete(Channel).where(Channel.workspace_id == ws.id))
+    db.delete(ws)
+    db.commit()
+
+
+def _number(value: str) -> float:
+    try:
+        return float(value.replace(",", "").replace("$", "").replace("%", "").strip())
+    except ValueError:
+        raise ValueError(f"'{value.strip()}' is not a number.") from None
+
+
 def _money(value: str) -> float | None:
-    value = value.replace(",", "").replace("$", "").strip()
-    if not value:
+    if not value.replace(",", "").replace("$", "").strip():
         return None
-    amount = float(value)
+    amount = _number(value)
     if amount <= 0:
         raise ValueError("Budgets must be positive.")
     return amount

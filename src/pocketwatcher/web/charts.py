@@ -4,11 +4,20 @@ import json
 import math
 from dataclasses import dataclass, field
 
-from pocketwatcher.analytics import PRODUCT_GROUPS, Bucket, Burn
-from pocketwatcher.rules.base import usd
+from pocketwatcher.analytics import PRODUCT_GROUPS, Bucket, Burn, short_day
 
 # Categorical slots in validated order (dataviz reference palette); "other" folds to neutral.
 GROUP_SLOT = {"jobs": 1, "sql": 2, "all_purpose": 3, "pipelines": 4, "serving": 5, "other": 0}
+
+
+def usd0(v: float) -> str:
+    """Money in the web UI: whole dollars, so "+$88" sits next to "+$243". Cents only below $10,
+    where they are a real share of the amount. Alerts keep `rules.base.usd`."""
+    sign = "-" if v < 0 else ""
+    a = abs(v)
+    if 0 < a < 10:
+        return f"{sign}${a:,.2f}"
+    return f"{sign}${a:,.0f}"
 
 
 def compact_usd(v: float) -> str:
@@ -49,6 +58,9 @@ class Column:
     segments: list[Segment]  # bottom to top
     show_label: bool
     tooltip: str  # JSON for the hover layer
+    axis_label: str = ""  # short form under the column; the tooltip and table keep the full label
+    alt: bool = False  # every other shown label, dropped on narrow screens
+    last: bool = False  # the right-most column: its label is right-anchored so it stays in the card
 
 
 @dataclass
@@ -58,12 +70,13 @@ class ColumnChart:
     legend: list[tuple[str, str, int]]  # (key, label, slot)
 
 
-def column_chart(buckets: list[Bucket]) -> ColumnChart:
+def column_chart(buckets: list[Bucket], unit: str = "day") -> ColumnChart:
     labels = dict(PRODUCT_GROUPS)
     present = [k for k, _ in PRODUCT_GROUPS if any(b.by_group.get(k) for b in buckets)]
     ticks = nice_ticks(max((b.total for b in buckets), default=0))
     top = ticks[-1]
     every = max(1, math.ceil(len(buckets) / 8))  # at most ~8 x labels
+    thin = math.ceil(len(buckets) / every) > 6  # more than 6 labels: drop every other one when narrow
     cols = []
     for i, b in enumerate(buckets):
         segs = [
@@ -73,10 +86,23 @@ def column_chart(buckets: list[Bucket]) -> ColumnChart:
         ]
         tip = {
             "title": b.label,
-            "total": usd(b.total),
-            "rows": [{"label": s.label, "value": usd(s.value), "slot": s.slot} for s in reversed(segs)],
+            "total": usd0(b.total),
+            "rows": [{"label": s.label, "value": usd0(s.value), "slot": s.slot} for s in reversed(segs)],
         }
-        cols.append(Column(b.label, b.total, segs, show_label=i % every == 0, tooltip=json.dumps(tip)))
+        # Months read as "Oct"; the partial month is footnoted in the card subtitle instead.
+        axis = f"{b.start:%b}" if unit == "month" else short_day(b.start) if unit == "week" else b.label
+        cols.append(
+            Column(
+                b.label,
+                b.total,
+                segs,
+                show_label=i % every == 0,
+                tooltip=json.dumps(tip),
+                axis_label=axis,
+                alt=thin and (i // every) % 2 == 1 and i != len(buckets) - 1,
+                last=i == len(buckets) - 1,
+            )
+        )
     return ColumnChart(
         columns=cols,
         ticks=[(t / top * 100, compact_usd(t)) for t in ticks],
@@ -119,11 +145,11 @@ def burn_chart(burn: Burn) -> BurnChart:
     fx, fy = x(days_in_month - 1), y(burn.forecast)
     forecast = f"M{pts[-1][0]:.1f},{pts[-1][1]:.2f} L{fx:.1f},{fy:.2f}"
     x_labels = [
-        (x(i) / 10, f"{burn.month_start.replace(day=i + 1):%b %d}")
+        (x(i) / 10, short_day(burn.month_start.replace(day=i + 1)))
         for i in sorted({0, (days_in_month - 1) // 2, days_in_month - 1})
     ]
     points = [
-        {"x": px / 10, "label": f"{d:%b %d}", "value": usd(v)}
+        {"x": px / 10, "label": short_day(d), "value": usd0(v)}
         for (d, v), (px, _) in zip(burn.cumulative, pts, strict=True)
     ]
     return BurnChart(

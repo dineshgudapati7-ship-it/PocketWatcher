@@ -183,6 +183,7 @@ the current terminal only.
 | Stop | `Ctrl+C` in each terminal. |
 | Check the web app is up | Open `http://localhost:8000/healthz`. |
 | Check the worker is alive | It prints **nothing while idle**. That is normal. Failures print as `ERROR ... failed for workspace N` followed by the error. A working sync shows on the Overview card as "Synced <time> UTC". |
+| Sync a workspace now instead of waiting | On the workspace page, click **Sync now**. It queues a billing sync and a live check; the worker (which must be running) picks them up within about 10 seconds. Refresh to see "Synced <time> UTC" change. It is refused for 5 minutes after a billing sync finishes, while one is queued, and while one is running, because each sync runs queries on the customer's SQL warehouse. It cannot bring in billing records sooner: Databricks writes them hours after usage. Only the live check (running clusters and warehouses) is up to the minute. |
 | Use another port | Add `--port 8001` and update `PW_APP_BASE_URL` and the WorkOS redirect URIs to match. |
 | Reload on code changes | Add `--reload` to the uvicorn command while you are editing code. |
 
@@ -349,7 +350,10 @@ Only real Databricks workspace addresses are accepted (`*.azuredatabricks.net`, 
 
 1. The worker loop asks the database for a workspace whose next run time has passed. It pushes the next run
    time forward first (6 hours for billing, 15 minutes for live checks), so no second worker takes the same
-   job. On failure it retries in 30 minutes.
+   job. On failure it retries in 30 minutes. **Sync now** on the workspace page only sets both next run times
+   to now; the web app never runs a sync itself. It is refused within 5 minutes of the last finished billing
+   sync (`MANUAL_SYNC_COOLDOWN` in `worker.py`), while a sync is queued, and while one is running (a claim
+   newer than the last finished sync, up to 30 minutes old).
 2. **Billing task** (`collectors/billing.py`): signs in to Databricks as the service principal, runs SQL on
    the customer's warehouse, and rewrites the affected days in the `daily_costs` table. It always re-reads
    the last 3 days plus any older day that received late or corrected records, so totals stay right.

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_ui.html" import workspace_summary, alert_table, check_list, icon, notice %}
+{% from "_ui.html" import workspace_summary, alert_table, check_list, icon, notice, setting_field %}
 {% block title %}{{ ws.name }} · PocketWatcher{% endblock %}
 {% block content %}
 <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Overview</a><span aria-hidden="true">/</span><span aria-current="page">{{ ws.name }}</span></nav>
@@ -8,51 +8,69 @@
     <h1>{{ ws.name }}</h1>
     <p><a href="{{ ws.host }}">{{ ws.host | replace("https://", "") }}</a></p>
   </div>
-  <div class="actions"><a class="btn" href="/analytics?ws={{ ws.id }}">{{ icon("analytics") }}Analytics</a></div>
+  <div class="actions">
+    <form class="inline" method="post" action="/workspaces/{{ ws.id }}/sync">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn" type="submit" aria-describedby="sync-hint"{% if sync_block %} disabled{% endif %}>{{ icon("sync") }}Sync now</button>
+    </form>
+    <a class="btn" href="/analytics?ws={{ ws.id }}">{{ icon("analytics") }}Analytics</a>
+  </div>
 </div>
 
-{{ workspace_summary(ws, outlook, link=False) }}
+<div>
+  {{ workspace_summary(ws, outlook, link=False) }}
+  <p class="hint sync-hint" id="sync-hint">{% if sync_block %}{{ sync_block }} {% endif %}Sync now runs the billing sync and live check right away. Databricks writes billing records hours after usage, so a sync cannot bring them in sooner; the live check of running clusters and warehouses is current.</p>
+</div>
 
 {% if checks %}
-<section class="card" style="margin-top: 20px">
+<section class="card">
   <div class="card-header"><h2>Connection checks</h2></div>
   {{ check_list(checks) }}
 </section>
 {% endif %}
 
-<section class="card" style="margin-top: 20px" id="settings">
+<section class="card" id="settings">
   <div class="card-header"><div><h2>Alert settings</h2><p>Changes apply from the next check.</p></div></div>
   <form method="post" action="/workspaces/{{ ws.id }}/settings">
     <div class="card-body">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       {% if flash and flash.near == "settings" %}{{ notice(flash) }}{% endif %}
       <div class="fields">
-        <div class="field"><label for="monthly_usd">Monthly budget (USD)</label>
-          <input id="monthly_usd" name="monthly_usd" inputmode="decimal" value="{{ cfg.budget.monthly_usd | plain if cfg.budget.monthly_usd else '' }}" placeholder="30000">
-          <span class="hint">Alerts on the month-end forecast and when exceeded. Leave blank to turn off.</span></div>
-        <div class="field"><label for="daily_usd">Daily budget (USD)</label>
-          <input id="daily_usd" name="daily_usd" inputmode="decimal" value="{{ cfg.budget.daily_usd | plain if cfg.budget.daily_usd else '' }}" placeholder="1200">
-          <span class="hint">Checked against each completed day.</span></div>
-        <div class="field"><label for="discount_percent">Discount off list price (%)</label>
-          <input id="discount_percent" name="discount_percent" inputmode="decimal" value="{{ '%g' % ((1 - ws.discount_multiplier) * 100) }}">
-          <span class="hint">From your Databricks contract, if any.</span></div>
-      </div>
-      <div class="fields">
-        <div class="field"><label for="required_tags">Required tags</label>
-          <input id="required_tags" name="required_tags" value="{{ cfg.untagged.required_tags | join(', ') }}" placeholder="team, cost_center">
-          <span class="hint">Alerts when more than 10% of a week's spend is missing one. Leave blank to turn off.</span></div>
-        <div class="field"><label for="dev_tag_values">Env tag values that mean dev</label>
-          <input id="dev_tag_values" name="dev_tag_values" value="{{ cfg.dev_premium.tag_values | join(', ') }}">
-          <span class="hint">Photon or serverless on these is flagged.</span></div>
+        {{ setting_field("monthly_usd", "Monthly budget (USD)", cfg.budget.monthly_usd | plain if cfg.budget.monthly_usd else "",
+             "Alerts on the month-end forecast and when exceeded. Leave blank to turn off.", rejected, placeholder="e.g. 30,000", inputmode="decimal") }}
+        {{ setting_field("daily_usd", "Daily budget (USD)", cfg.budget.daily_usd | plain if cfg.budget.daily_usd else "",
+             "Checked against each completed day. Leave blank to turn off.", rejected, placeholder="e.g. 1,200", inputmode="decimal") }}
+        {{ setting_field("discount_percent", "Discount off list price (%)", "%g" % ((1 - ws.discount_multiplier) * 100),
+             "From your Databricks contract, if any.", rejected, inputmode="decimal") }}
+        {{ setting_field("required_tags", "Required tags", cfg.untagged.required_tags | join(", "),
+             "Alerts when more than 10% of a week's spend is missing one. Leave blank to turn off.", rejected, span="span-4", placeholder="e.g. team, cost_center") }}
+        {{ setting_field("dev_tag_values", "Env tag values that mean dev", cfg.dev_premium.tag_values | join(", "),
+             "Photon or serverless on these is flagged.", rejected) }}
       </div>
     </div>
-    <div class="card-foot"><button class="btn btn-primary" type="submit">Save settings</button><span class="muted">Costs cover DBUs only, not cloud VM charges.</span></div>
+    <div class="card-foot"><button class="btn btn-primary" type="submit">Save settings</button><span class="hint">Costs cover DBUs only, not cloud VM charges.</span></div>
   </form>
 </section>
 
-<section class="card" style="margin-top: 20px">
+<section class="card">
   <div class="card-header"><h2>Alert history</h2></div>
   {% if board %}{{ alert_table(board, {}, show_workspace=False) }}
   {% else %}<div class="empty"><h3>No alerts yet</h3><p>Alerts for this workspace will appear here with their delivery status.</p></div>{% endif %}
+</section>
+
+<section class="card" id="remove">
+  <div class="card-header"><div><h2>Remove workspace</h2><p>Stops all syncs and alerts for this workspace and deletes its cost and alert history from PocketWatcher. This cannot be undone.</p></div></div>
+  <form method="post" action="/workspaces/{{ ws.id }}/delete">
+    <div class="card-body">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      {% if flash and flash.near == "remove" %}{{ notice(flash) }}{% endif %}
+      <div class="fields">
+        <div class="field span-4"><label for="confirm">Type <strong>{{ ws.name }}</strong> to confirm</label>
+          <input id="confirm" name="confirm" autocomplete="off" spellcheck="false" required aria-describedby="confirm-hint">
+          <span class="hint" id="confirm-hint">Nothing changes in Databricks. Afterwards you can delete the service principal <code>{{ ws.client_id }}</code> there.</span></div>
+      </div>
+    </div>
+    <div class="card-foot"><button class="btn btn-danger" type="submit">Remove workspace</button></div>
+  </form>
 </section>
 {% endblock %}

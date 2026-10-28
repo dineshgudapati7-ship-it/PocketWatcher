@@ -2,8 +2,8 @@
 {% from "_ui.html" import icon, theme_switch %}
 {% block standalone %}
 <header class="landing-top">
-  <a class="brand" href="/" style="padding: 0"><span class="brand-mark">{{ icon("pulse") }}</span><span>PocketWatcher</span></a>
-  <div class="actions" style="align-items: center">{{ theme_switch() }}<a class="btn" href="/login">Sign in</a></div>
+  <a class="brand brand-bare" href="/"><span class="brand-mark">{{ icon("pulse") }}</span><span>PocketWatcher</span></a>
+  <div class="actions actions-center">{{ theme_switch() }}<a class="btn" href="/login">Sign in</a></div>
 </header>
 <main>
   <section class="hero">
@@ -17,12 +17,12 @@
     <div class="preview" aria-label="Example overview with sample data">
       <div class="card" aria-hidden="true">
         <div class="card-header"><div><h2>October, month to date</h2><p>acme-prod · estimated list price</p></div><span class="badge badge-at_risk">At risk</span></div>
-        <div class="kpis" style="grid-template-columns: repeat(3, minmax(0, 1fr))">
+        <div class="kpis kpis-3">
           <div><div class="k">Spent</div><div class="v">$21,480</div><div class="s">Through Oct 26</div></div>
           <div><div class="k">Forecast</div><div class="v">$32,900</div><div class="s">By Oct 31</div></div>
-          <div><div class="k">Budget</div><div class="v">$30,000</div><div class="s">$2,900 over</div></div>
+          <div><div class="k">Budget</div><div class="v">$30,000</div><div class="s"><span class="delta delta-up">$2,900 over</span></div></div>
         </div>
-        <div class="table-wrap" style="border-top: 1px solid var(--border)">
+        <div class="table-wrap table-ruled">
         <table class="table">
           <thead><tr><th>Top cost by team</th><th class="r">Spend</th><th class="r">Share</th></tr></thead>
           <tbody>
@@ -38,9 +38,11 @@
     </div>
   </section>
   <section class="features">
+    <div class="features-grid">
     <div><h2>Read-only by design</h2><p>A service principal with SELECT on system tables. PocketWatcher never starts, changes or stops your compute.</p></div>
     <div><h2>Set up in about 10 minutes</h2><p>Copy three blocks of setup and paste a webhook. Every permission is checked before anything is saved.</p></div>
     <div><h2>Numbers finance can trust</h2><p>Spend by team, product and owner, with CSV export. Every figure is labelled as an estimate at list price with your discount applied.</p></div>
+    </div>
   </section>
 </main>
 {% endblock %}

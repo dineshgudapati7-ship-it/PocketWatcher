@@ -92,6 +92,27 @@ def test_full_cycle_sends_billing_and_live_alerts_once(sessions):
         assert ws.next_billing_at.replace(tzinfo=UTC) == NOW + BILLING_INTERVAL
 
 
+def test_each_task_logs_one_line_saying_what_it_did(sessions, caplog):
+    caplog.set_level("INFO", logger="pocketwatcher.worker")
+    run_once(sessions, FakeConnector(tables_with_runaway_poc()), lambda *a: None, NOW)
+    assert "billing sync ok: workspace 1 'acme-prod': 29 day(s) read, 30 cost row(s), 4 finding(s)" in caplog.text
+    assert "live check ok: workspace 1 'acme-prod': 0 running cluster(s), 0 running warehouse(s)" in caplog.text
+
+
+def test_workspace_removed_while_its_task_runs_does_not_crash_the_loop(sessions):
+    from pocketwatcher.web.app import remove_workspace
+
+    class RemovedMidSync(FakeConnector):
+        def warehouse(self, ws):
+            with sessions() as other:  # the owner removes it from the web app meanwhile
+                remove_workspace(other, other.get(Workspace, ws.id))
+            raise RuntimeError("workspace gone")
+
+    assert run_once(sessions, RemovedMidSync(tables_with_runaway_poc()), lambda *a: None, NOW) == 1
+    with sessions() as s:
+        assert s.scalars(select(Workspace)).all() == []
+
+
 def test_failing_workspace_is_retried_later_and_does_not_crash_the_loop(sessions):
     connector = FakeConnector(tables_with_runaway_poc(), broken=True)
     assert run_once(sessions, connector, lambda *a: None, NOW) == 2

@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from pocketwatcher import crypto
 from pocketwatcher.alerts.links import mute_token
-from pocketwatcher.db.models import Base, Channel, Mute, Tenant, Workspace
+from pocketwatcher.db.models import AlertLog, Base, Channel, Mute, Tenant, Workspace
 from pocketwatcher.onboarding.preflight import cloud_from_host, run_preflight
 from pocketwatcher.onboarding.setup_sql import setup_steps
 from pocketwatcher.onboarding.test_alert import send_test_alert
@@ -179,6 +179,43 @@ def test_mute_link_get_only_confirms_and_post_mutes(sessions):
         assert mute.fingerprint == "anomaly:7:job:j1:2026-10-19"
         remaining = mute.until.replace(tzinfo=UTC) - datetime.now(UTC)
         assert timedelta(days=7) - timedelta(minutes=1) < remaining <= timedelta(days=7)
+
+
+def test_mute_page_names_the_alert_it_mutes(sessions):
+    fingerprint = "anomaly:7:job:j1:2026-10-19"
+    with sessions() as s:
+        ch = Channel(tenant_id=1, name="#c", kind="slack", target_enc="x")
+        s.add(ch)
+        s.flush()
+        for hours, title in (
+            (30, "Spend spike: job j1 cost $90 on Oct 18"),
+            (2, "Spend spike: job j1 cost $640 on Oct 19"),
+        ):
+            s.add(
+                AlertLog(
+                    workspace_id=7,
+                    channel_id=ch.id,
+                    fingerprint=fingerprint,
+                    rule="anomaly",
+                    severity="warning",
+                    impact_usd=640,
+                    title=title,
+                    status="sent",
+                    created_at=datetime.now(UTC) - timedelta(hours=hours),
+                )
+            )
+        s.commit()
+    client = TestClient(create_app(sessions))
+    token = mute_token(7, fingerprint)
+    page = client.get("/mute", params={"t": token}).text
+    assert "Spend spike: job j1 cost $640 on Oct 19" in page and "$90" not in page  # the latest send
+    assert 'href="/">Open PocketWatcher' in page
+    assert "Spend spike: job j1 cost $640 on Oct 19" in client.post("/mute", data={"t": token}).text
+
+
+def test_mute_page_without_a_logged_alert_still_works(sessions):
+    page = TestClient(create_app(sessions)).get("/mute", params={"t": mute_token(7, "budget:7:month")})
+    assert page.status_code == 200 and "Mute this alert for 7 days?" in page.text and "muted-alert" not in page.text
 
 
 def test_tampered_mute_link_is_rejected(sessions):
